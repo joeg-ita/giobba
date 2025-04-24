@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"giobba/src/entities"
-	"giobba/src/services"
-	"giobba/src/usecases"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/joeg-ita/giobba/src/entities"
+	"github.com/joeg-ita/giobba/src/services"
+	"github.com/joeg-ita/giobba/src/usecases"
 )
 
 func main() {

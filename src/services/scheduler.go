@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"giobba/src/entities"
 	"log"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/joeg-ita/giobba/src/entities"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"

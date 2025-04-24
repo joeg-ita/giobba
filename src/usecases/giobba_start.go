@@ -3,11 +3,12 @@ package usecases
 import (
 	"context"
 	"fmt"
-	"giobba/src/handlers"
-	"giobba/src/services"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/joeg-ita/giobba/src/handlers"
+	"github.com/joeg-ita/giobba/src/services"
 )
 
 type GiobbaStart struct {

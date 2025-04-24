@@ -2,8 +2,9 @@ package services
 
 import (
 	"context"
-	"giobba/src/entities"
 	"time"
+
+	"github.com/joeg-ita/giobba/src/entities"
 )
 
 type BrokerInt interface {

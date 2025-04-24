@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"giobba/src/entities"
 	"log"
 	"time"
+
+	"github.com/joeg-ita/giobba/src/entities"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"

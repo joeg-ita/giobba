@@ -3,17 +3,19 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"giobba/src/entities"
-	"giobba/src/services"
 	"log"
 	"time"
+
+	"github.com/joeg-ita/giobba/src/entities"
+	"github.com/joeg-ita/giobba/src/services"
 )
 
 var Handlers = map[string]services.TaskHandlerInt{
 	"process": &Process{},
 }
 
-type Process struct{}
+type Process struct {
+}
 
 func (t *Process) Run(ctx context.Context, task entities.Task) error {
 	log.Printf("Processing task: %s", task.Name)
