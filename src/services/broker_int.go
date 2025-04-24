@@ -1,0 +1,31 @@
+package services
+
+import (
+	"context"
+	"giobba/src/entities"
+	"time"
+)
+
+type BrokerInt interface {
+	AddTask(task entities.Task, queue string) (string, error)
+
+	SaveTask(task entities.Task, queue string) (string, error)
+
+	GetTask(taskId string, queue string) (entities.Task, error)
+
+	DeleteTask(taskId string, queue string) error
+
+	Schedule(task entities.Task, queue string) error
+
+	UnSchedule(taskId string, queue string) error
+
+	GetScheduled(queue string) ([]string, error)
+
+	Lock(taskId string, queue string, lockDuration time.Duration) bool
+
+	UnLock(taskId string, queue string) error
+
+	Subscribe(context context.Context, channel string) interface{}
+
+	Close()
+}
