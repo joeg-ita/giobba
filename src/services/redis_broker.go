@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/joeg-ita/giobba/src/entities"
@@ -131,20 +132,20 @@ func (r *RedisBroker) Schedule(task entities.Task, queue string) error {
 	if score < float64(time.Now().Unix()) {
 		score = float64(time.Now().Unix())
 	}
-	priority := float64(task.Priority) / 100000.0
+	priority := float64(math.Abs(float64(task.Priority)-10.0)) / 100000.0
 	finalScore := score + priority
 	r.client.ZAdd(context.Background(), queue, redis.Z{
 		Score:  finalScore,
 		Member: task.ID,
 	})
-	// r.client.ZRem(context.Background(), queue, taskId)
+
 	return nil
 }
 
 func (r *RedisBroker) GetScheduled(queue string) ([]string, error) {
 
 	now := time.Now()
-	maxScore := float64(now.Unix() * 100)
+	maxScore := float64(now.Unix())
 
 	// Otteniamo i task pronti per l'esecuzione (con score <= maxScore)
 	taskIDs, err := r.client.ZRangeByScore(context.Background(), queue, &redis.ZRangeBy{
@@ -157,7 +158,7 @@ func (r *RedisBroker) GetScheduled(queue string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	// r.client.ZRem(context.Background(), queue, taskId)
+
 	return taskIDs, nil
 }
 

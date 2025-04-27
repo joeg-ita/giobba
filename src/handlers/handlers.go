@@ -20,7 +20,7 @@ type Process struct {
 func (t *Process) Run(ctx context.Context, task entities.Task) error {
 	log.Printf("Processing task: %s", task.Name)
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 5; i++ {
 		// Check for cancellation during the inner loop
 		select {
 		case <-ctx.Done():

@@ -1,4 +1,4 @@
-package main
+package giobba
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"github.com/joeg-ita/giobba/src/usecases"
 )
 
-func main() {
+func Giobba() {
 	fmt.Println("Giobba")
 
 	giobba := usecases.NewGiobbaStart()

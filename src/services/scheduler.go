@@ -109,11 +109,11 @@ func (s *Scheduler) startPubSub() {
 		splitted := strings.Split(msg.Payload, ":")
 		if len(splitted) == 3 {
 			if strings.ToUpper(splitted[0]) == "KILL" {
-				s.killTask(splitted[2], splitted[1])
+				s.KillTask(splitted[2], splitted[1])
 			} else if strings.ToUpper(splitted[0]) == "REVOKE" {
-				s.revokeTask(splitted[2], splitted[1])
+				s.RevokeTask(splitted[2], splitted[1])
 			} else if strings.ToUpper(splitted[0]) == "AUTO" {
-				s.autoTask(splitted[2], splitted[1])
+				s.AutoTask(splitted[2], splitted[1])
 			}
 		}
 
@@ -326,8 +326,8 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
 
 }
 
-// Update killTask to properly handle cancellation
-func (s *Scheduler) killTask(taskID string, queue string) error {
+// Update KillTask to properly handle cancellation
+func (s *Scheduler) KillTask(taskID string, queue string) error {
 	log.Printf("killing task %v", taskID)
 	task, err := s.queueClient.GetTask(taskID, queue)
 	if err != nil {
@@ -369,7 +369,7 @@ func (s *Scheduler) killTask(taskID string, queue string) error {
 	return nil
 }
 
-func (s *Scheduler) revokeTask(taskID string, queue string) error {
+func (s *Scheduler) RevokeTask(taskID string, queue string) error {
 
 	if s.queueClient.Lock(taskID, s.Queue, s.LockDuration) {
 		log.Printf("revoking task %v", taskID)
@@ -394,7 +394,7 @@ func (s *Scheduler) revokeTask(taskID string, queue string) error {
 	return nil
 }
 
-func (s *Scheduler) autoTask(taskID string, queue string) error {
+func (s *Scheduler) AutoTask(taskID string, queue string) error {
 
 	if s.queueClient.Lock(taskID, s.Queue, s.LockDuration) {
 		log.Printf("setting task %v to auto run", taskID)
@@ -417,6 +417,26 @@ func (s *Scheduler) autoTask(taskID string, queue string) error {
 	}
 	log.Printf("Task %s successfully set to auto run", taskID)
 	return nil
+}
+
+func (s *Scheduler) TaskState(taskID string, queue string) (entities.TaskState, error) {
+
+	task, err := s.Task(taskID, queue)
+	if err != nil {
+		return "", fmt.Errorf("failed to find task %s: %v", taskID, err)
+	}
+	log.Printf("Task %v state %v ", task.ID, task.State)
+	return task.State, nil
+}
+
+func (s *Scheduler) Task(taskID string, queue string) (entities.Task, error) {
+
+	task, err := s.queueClient.GetTask(taskID, queue)
+	if err != nil {
+		return entities.Task{}, fmt.Errorf("failed to find task %s: %v", taskID, err)
+	}
+	log.Printf("Retrieved Task %v", task.ID)
+	return task, nil
 }
 
 func (s *Scheduler) AddTask(task entities.Task) (string, error) {
