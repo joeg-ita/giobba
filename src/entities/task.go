@@ -1,7 +1,11 @@
 package entities
 
 import (
+	"fmt"
+	"net/url"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type TaskState string
@@ -29,23 +33,141 @@ type Task struct {
 	Queue       string                 `json:"queue"`
 	State       TaskState              `json:"state"`
 	ETA         time.Time              `json:"eta"`
+	Priority    int                    `json:"priority"`
+	ParentID    string                 `json:"parent_id"`
+	StartMode   StartMode              `json:"startMode"`
+	Error       string                 `json:"error,omitempty"`
 	CreatedAt   time.Time              `json:"created_at,omitempty"`
 	UpdatedAt   time.Time              `json:"updated_at,omitempty"`
 	StartedAt   time.Time              `json:"started_at,omitempty"`
-	FinishedAt  time.Time              `json:"finished_at,omitempty"`
+	CompletedAt time.Time              `json:"completed_at,omitempty"`
 	ExpireAt    time.Time              `json:"expire_at,omitempty"`
-	Timeout     time.Duration          `json:"timeout"`
-	Error       string                 `json:"error"`
 	Result      map[string]interface{} `json:"result,omitempty"`
-	Retries     int                    `json:"retries"`
+	Retries     int                    `json:"retries,omitempty"`
 	MaxRetries  int                    `json:"max_retries,omitempty"`
-	Priority    int                    `json:"priority"`
 	Tags        []string               `json:"tags,omitempty"`
 	SchedulerID string                 `json:"scheduler_id,omitempty"`
 	WorkerID    string                 `json:"worker_id,omitempty"`
-	ParentID    string                 `json:"parent_id"`
 	ChildrenID  []string               `json:"children_id,omitempty"`
-	StartMode   StartMode              `json:"startMode"`
-	Callback    string                 `json:"callback"`
-	CallbackErr string                 `json:"callback_err"`
+	Callback    string                 `json:"callback,omitempty"`
+	CallbackErr string                 `json:"callback_err,omitempty"`
+}
+
+func NewTask(name string, payload map[string]interface{}, queue string, eta time.Time, priority int, mode StartMode, parentId string) Task {
+	id := uuid.New().String()
+	if parentId == "" {
+		parentId = id
+	}
+
+	return Task{
+		ID:        id,
+		Name:      name,
+		Payload:   payload,
+		Queue:     queue,
+		ETA:       eta,
+		Priority:  priority,
+		StartMode: mode,
+		State:     PENDING,
+	}
+}
+
+func (t *Task) Validate() error {
+	if t.ID == "" {
+		return fmt.Errorf("task ID is required")
+	}
+
+	if !isValidUUID(t.ID) {
+		return fmt.Errorf("invalid task ID format: must be a valid UUID")
+	}
+
+	if t.Name == "" {
+		return fmt.Errorf("task name is required")
+	}
+
+	if t.Queue == "" {
+		return fmt.Errorf("task queue is required")
+	}
+
+	if t.State == "" {
+		return fmt.Errorf("task state is required")
+	}
+
+	// Validate State is one of the defined TaskStates
+	validState := false
+	for _, state := range []TaskState{PENDING, RUNNING, COMPLETED, FAILED, REVOKED, KILLED} {
+		if t.State == state {
+			validState = true
+			break
+		}
+	}
+	if !validState {
+		return fmt.Errorf("invalid task state: %s", t.State)
+	}
+
+	// Validate StartMode
+	if t.StartMode != AUTO && t.StartMode != MANUAL {
+		return fmt.Errorf("invalid start mode: %s", t.StartMode)
+	}
+
+	// Validate Retries and MaxRetries
+	if t.Retries < 0 {
+		return fmt.Errorf("retries cannot be negative")
+	}
+	if t.MaxRetries < 0 {
+		return fmt.Errorf("max retries cannot be negative")
+	}
+	if t.MaxRetries > 0 && t.Retries > t.MaxRetries {
+		return fmt.Errorf("retries cannot be greater than max retries")
+	}
+
+	if t.Priority < 0 || t.Priority > 10 {
+		return fmt.Errorf("piority must be a value in range [0,10]. higher value higher priority")
+	}
+
+	if t.ETA.IsZero() {
+		return fmt.Errorf("eta datetime required")
+	}
+
+	// Validate Callback URL if present
+	if !isValidURL(t.Callback) {
+		return fmt.Errorf("invalid callback URL format")
+	}
+
+	if !isValidURL(t.CallbackErr) {
+		return fmt.Errorf("invalid callback error URL format")
+	}
+
+	if !isValidUUID(t.ParentID) {
+		return fmt.Errorf("invalid parent ID format: must be a valid UUID")
+	}
+
+	if len(t.ChildrenID) > 0 {
+		for _, id := range t.ChildrenID {
+			if !isValidUUID(id) {
+				return fmt.Errorf("invalid children ID format: must be a valid UUID")
+			}
+		}
+	}
+
+	return nil
+}
+
+func isValidURL(str string) bool {
+	if str == "" {
+		return true // Empty URL is considered valid (optional URL)
+	}
+
+	u, err := url.Parse(str)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+func isValidUUID(str string) bool {
+	if str == "" {
+		return true
+	}
+	// Add UUID validation
+	if _, err := uuid.Parse(str); err != nil {
+		return false
+	}
+	return true
 }

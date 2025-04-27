@@ -285,7 +285,7 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
 		if err == nil {
 			log.Printf("task %s completed!", task.ID)
 			task.State = entities.COMPLETED
-			task.FinishedAt = time.Now()
+			task.CompletedAt = time.Now()
 			if task.Callback != "" {
 				go s.callback(task.Callback, task.Result)
 			}
@@ -310,7 +310,7 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
 		log.Printf("task %s cancelled", task.ID)
 		errorMsg := fmt.Errorf("task cancelled")
 		task.State = entities.KILLED
-		task.FinishedAt = time.Now()
+		task.CompletedAt = time.Now()
 		task.Error = errorMsg.Error()
 		s.queueClient.SaveTask(task, s.Queue)
 		s.queueClient.UnLock(task.ID, s.Queue)
