@@ -142,6 +142,7 @@ func (r *RedisBroker) Schedule(task entities.Task, queue string) error {
 	return nil
 }
 
+// TODO relace with ZRange with BYSCORE option (REV to get inverse order)
 func (r *RedisBroker) GetScheduled(queue string) ([]string, error) {
 
 	now := time.Now()
