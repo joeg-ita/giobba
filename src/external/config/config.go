@@ -20,7 +20,7 @@ type Database struct {
 	Port     string `yaml:"port" env:"GIOBBA_DATABASE_PORT"`
 	Username string `yaml:"username" env:"GIOBBA_DATABASE_ADMIN_USERNAME"`
 	Password string `yaml:"password" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
-  DB string `yaml:"db" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
+        DB string       `yaml:"db" env:"GIOBBA_DATABASE"`
 }
 
 type Broker struct {
@@ -28,7 +28,7 @@ type Broker struct {
 	Port     string `yaml:"port" env:"GIOBBA_BROKER_PORT"`
 	Username string `yaml:"username" env:"GIOBBA_BROKER_ADMIN_USERNAME"`
 	Password string `yaml:"password" env:"GIOBBA_BROKER_ADMIN_PASSWORD"`
-  DB       string `yaml:"db" env:"GIOBBA_BROKER_ADMIN_PASSWORD"`
+        DB       string `yaml:"db" env:"GIOBBA_BROKER_DB"`
 }
 
 type Config struct {
