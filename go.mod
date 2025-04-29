@@ -5,6 +5,7 @@ go 1.23.3
 require (
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.7.3
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
