@@ -12,7 +12,7 @@ import (
 const (
 	Development        = "dev"
 	Production         = "prod"
-	ConfigBaseFileName = "/config"
+	ConfigBaseFileName = "config"
 )
 
 type Database struct {
@@ -20,7 +20,7 @@ type Database struct {
 	Port     string `yaml:"port" env:"GIOBBA_DATABASE_PORT"`
 	Username string `yaml:"username" env:"GIOBBA_DATABASE_ADMIN_USERNAME"`
 	Password string `yaml:"password" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
-        DB string       `yaml:"db" env:"GIOBBA_DATABASE"`
+	DB       string `yaml:"db" env:"GIOBBA_DATABASE"`
 }
 
 type Broker struct {
@@ -28,14 +28,17 @@ type Broker struct {
 	Port     string `yaml:"port" env:"GIOBBA_BROKER_PORT"`
 	Username string `yaml:"username" env:"GIOBBA_BROKER_ADMIN_USERNAME"`
 	Password string `yaml:"password" env:"GIOBBA_BROKER_ADMIN_PASSWORD"`
-        DB       string `yaml:"db" env:"GIOBBA_BROKER_DB"`
+	DB       string `yaml:"db" env:"GIOBBA_BROKER_DB"`
 }
 
 type Config struct {
-	Name     string   `yaml:"name"`
-	Version  string   `yaml:"version" env:"APP_VERSION"`
-	Database Database `yaml:"database"`
-  Broker   Broker   `yaml:"broker"`
+	Name          string   `yaml:"name"`
+	Version       string   `yaml:"version" env:"APP_VERSION"`
+	Database      Database `yaml:"database"`
+	Broker        Broker   `yaml:"broker"`
+	Queues        []string `yaml:"queues"`
+	WorkersNumber int      `yaml:"workersNumber"`
+	LockDuration  int      `yaml:"lockDuration"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -53,11 +56,13 @@ func LoadConfig() (*Config, error) {
 		homePath += "/.giobba"
 	}
 
+	pwdPath, _ := os.LookupEnv("PWD")
+
 	// Add config paths
 	configPaths := []string{
-		"/etc/giobba.d",
-		homePath,
-		"./config",
+		"/etc/giobba.d/",
+		homePath + "/.",
+		pwdPath + "/.",
 	}
 
 	var err error
@@ -75,7 +80,7 @@ func LoadConfig() (*Config, error) {
 					err = nil
 					break
 				} else {
-					err = errors.New("Something went wrong")
+					err = errors.New("something went wrong")
 				}
 				break
 			}
@@ -91,11 +96,10 @@ func ConfigFromYaml(filePath string) *Config {
 	// Open the YAML file
 	log.Printf("ConfigFromYaml - Loading file: %v", filePath)
 	file, err := os.Open(filePath)
-	defer file.Close()
-
 	if err != nil {
 		return nil
 	}
+	defer file.Close()
 
 	// Decode the YAML file into the struct
 	decoder := yaml.NewDecoder(file)

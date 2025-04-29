@@ -1,5 +1,8 @@
 name: giobba
 version: 0.1.0
+queues: ["default"]
+workersNumber: 5
+lockDuration: 10
 
 database:
   url: 0.0.0.0

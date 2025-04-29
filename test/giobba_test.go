@@ -1,17 +1,19 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/joeg-ita/giobba"
 	"github.com/joeg-ita/giobba/src/entities"
-	"github.com/joeg-ita/giobba/src/usecases"
+	"github.com/joeg-ita/giobba/src/services"
 )
 
-var giobba *usecases.GiobbaStart
+var scheduler services.Scheduler
 
 func TestMain(m *testing.M) {
 	// Global setup before any tests run
@@ -32,8 +34,10 @@ func TestMain(m *testing.M) {
 // setupTestSuite performs one-time setup for the entire test suite
 func setupTestSuite() {
 	fmt.Println("Setting up test environment...")
-	giobba = usecases.NewGiobbaStart()
-	go giobba.Run()
+	brokerClient := services.NewRedisBrokerByUrl(os.Getenv("GIOBBA_BROKER_URL"))
+	scheduler = services.NewScheduler(context.Background(), brokerClient, "default", 1, 1)
+	go giobba.Giobba()
+	go giobba.Giobba()
 }
 
 // teardownTestSuite performs one-time cleanup after all tests have run
@@ -44,8 +48,6 @@ func teardownTestSuite() {
 func TestMainTaskAndSubTasksAutoAndManual(t *testing.T) {
 
 	fmt.Println("TestMainTaskAndSubTasksAutoAndManual...")
-
-	scheduler := &giobba.Scheduler
 
 	taskid, _ := scheduler.AddTask(entities.Task{
 		ID:    uuid.NewString(),
@@ -110,8 +112,6 @@ func TestMainTaskAndSubTasksAutoAndManual(t *testing.T) {
 func TestTasksWithDifferentPriorities(t *testing.T) {
 
 	fmt.Println("TestTasksWithDifferentPriorities...")
-
-	scheduler := &giobba.Scheduler
 
 	now := time.Now().Add(5 * time.Second)
 	queue := "default"
