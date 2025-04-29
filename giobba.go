@@ -22,7 +22,7 @@ func Giobba() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	scheduler := services.NewScheduler(ctx, brokerClient, cfg.Queues[0], cfg.WorkersNumber, cfg.LockDuration)
+	scheduler := services.NewScheduler(ctx, brokerClient, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
 
 	giobba := usecases.NewGiobbaStart(&scheduler)
 	giobba.Run()

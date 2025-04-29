@@ -134,9 +134,10 @@ func (r *RedisBroker) Schedule(task entities.Task, queue string) error {
 	}
 	priority := float64(math.Abs(float64(task.Priority)-10.0)) / 100000.0
 	finalScore := score + priority
+
 	r.client.ZAdd(context.Background(), queue, redis.Z{
 		Score:  finalScore,
-		Member: task.ID,
+		Member: fmt.Sprintf("%s::%s::%f", task.ID, queue, finalScore),
 	})
 
 	return nil

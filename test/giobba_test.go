@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 func setupTestSuite() {
 	fmt.Println("Setting up test environment...")
 	brokerClient := services.NewRedisBrokerByUrl(os.Getenv("GIOBBA_BROKER_URL"))
-	scheduler = services.NewScheduler(context.Background(), brokerClient, "default", 1, 1)
+	scheduler = services.NewScheduler(context.Background(), brokerClient, []string{"default", "background"}, 1, 1)
 	go giobba.Giobba()
 	go giobba.Giobba()
 }
@@ -114,7 +114,7 @@ func TestTasksWithDifferentPriorities(t *testing.T) {
 	fmt.Println("TestTasksWithDifferentPriorities...")
 
 	now := time.Now().Add(5 * time.Second)
-	queue := "default"
+	queue := "background"
 	taskid_p9, _ := scheduler.AddTask(entities.Task{
 		ID:    uuid.NewString(),
 		Name:  "process",

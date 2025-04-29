@@ -1,6 +1,6 @@
 name: giobba
 version: 0.1.0
-queues: ['default']
+queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 10
 
