@@ -109,9 +109,9 @@ func TestMainTaskAndSubTasksAutoAndManual(t *testing.T) {
 
 }
 
-func TestTasksWithDifferentPriorities(t *testing.T) {
+func TestTasksWithSameDatetimeDifferentPriorities(t *testing.T) {
 
-	fmt.Println("TestTasksWithDifferentPriorities...")
+	fmt.Println("TestTasksWithSameDatetimeDifferentPriorities...")
 
 	now := time.Now().Add(5 * time.Second)
 	queue := "background"
@@ -175,6 +175,62 @@ func TestTasksWithDifferentPriorities(t *testing.T) {
 	}
 	if result[taskid_p5].StartedAt.After(result[taskid_p2].StartedAt) {
 		t.Error("task_05 finished after task_02")
+	}
+
+}
+
+func TestTasksWithDifferenteDatetime(t *testing.T) {
+
+	fmt.Println("TestTasksWithDifferenteDatetime...")
+
+	now := time.Now().Add(20 * time.Second)
+	queue := "background"
+	taskid_after_20_sec, _ := scheduler.AddTask(entities.Task{
+		ID:    uuid.NewString(),
+		Name:  "process",
+		Queue: queue,
+		Payload: map[string]interface{}{
+			"user": "tizio",
+			"job":  "process",
+		},
+		ETA:       now,
+		Priority:  9,
+		StartMode: entities.AUTO,
+	})
+
+	now := time.Now().Add(5 * time.Second)
+	taskid_after_5_sec, _ := scheduler.AddTask(entities.Task{
+		ID:    uuid.NewString(),
+		Name:  "process",
+		Queue: queue,
+		Payload: map[string]interface{}{
+			"user": "tizio",
+			"job":  "process",
+		},
+		ETA:       now,
+		Priority:  2,
+		StartMode: entities.AUTO,
+	})
+
+	
+	tasks := []string{taskid_after_20_sec, taskid_after_5_sec}
+	result := make(map[string]entities.Task)
+
+	for {
+		for _, tid := range tasks {
+			task, _ := scheduler.Task(tid, queue)
+			if task.State == "COMPLETED" {
+				result[tid] = task
+			}
+			time.Sleep(2 * time.Second)
+		}
+		if len(result) == 3 {
+			break
+		}
+	}
+
+	if result[taskid_after_20_sec].StartedAt.Before(result[taskid_after_5_sec].StartedAt) {
+		t.Error("task_09 finished after task_05")
 	}
 
 }
