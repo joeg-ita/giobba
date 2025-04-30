@@ -143,7 +143,7 @@ func (s *Scheduler) startWorker(worker *Worker) {
 
 			// Try to fetch and process a task
 			if time.Now().Unix()%10 == 0 {
-				log.Printf("worker %v idle (-_-) zzz", worker.Id)
+				log.Printf("worker %v (-_-) zzz", worker.Id)
 			}
 			err := s.fetchAndProcessTask(worker)
 
@@ -216,8 +216,8 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		}
 
 		// Verifichiamo che ETA sia stata raggiunta
-		if task.ETA.Before(time.Now()) {
-			log.Printf("ETA %s not yet reached for task %s", task.ETA, taskID)
+		if task.ETA.After(time.Now()) {
+			log.Printf("ETA %s not yet reached %s for task %s", task.ETA, time.Now(), taskID)
 			continue
 		}
 

@@ -223,7 +223,7 @@ func TestTasksWithDifferenteDatetime(t *testing.T) {
 			}
 			time.Sleep(2 * time.Second)
 		}
-		if len(result) == 3 {
+		if len(result) == 2 {
 			break
 		}
 	}

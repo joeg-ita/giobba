@@ -147,7 +147,7 @@ func (r *RedisBroker) Schedule(task entities.Task, queue string) error {
 func (r *RedisBroker) GetScheduled(queue string) ([]string, error) {
 
 	now := time.Now()
-	maxScore := float64(now.Unix())
+	maxScore := float64(now.Add(1 * time.Second).Unix())
 
 	// Otteniamo i task pronti per l'esecuzione (con score <= maxScore)
 	taskIDs, err := r.client.ZRangeByScore(context.Background(), queue, &redis.ZRangeBy{
