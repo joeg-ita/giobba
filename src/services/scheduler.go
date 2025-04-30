@@ -143,7 +143,7 @@ func (s *Scheduler) startWorker(worker *Worker) {
 
 			// Try to fetch and process a task
 			if time.Now().Unix()%10 == 0 {
-				log.Printf("worker %v idle :-/", worker.Id)
+				log.Printf("worker %v idle (-_-) zzz", worker.Id)
 			}
 			err := s.fetchAndProcessTask(worker)
 
@@ -173,13 +173,10 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 	queues := s.Queues
 
 	for _, queue := range queues {
-
 		scheduled, err := s.queueClient.GetScheduled(queue + QUEUE_SCHEDULE_POSTFIX)
-
 		if err != nil {
 			return err
 		}
-
 		allScheduled = append(allScheduled, scheduled...)
 	}
 
@@ -205,7 +202,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		task, err := s.queueClient.GetTask(taskID, taskQueue)
 		if err == redis.Nil {
 			// Il task non esiste più, lo rimuoviamo dalla coda di scheduling
-			s.queueClient.UnSchedule(schedTaskItem, taskQueue)
+			s.queueClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 			continue
 		} else if err != nil {
 			log.Printf("error fetching task %s from queue %s: %v", taskID, taskQueue, err)
@@ -218,13 +215,19 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			continue
 		}
 
-		// Verifichiamo se il task è stato cancellato
-		if task.State == entities.REVOKED {
-			// Il task revoked, lo rimuoviamo dalla coda di scheduling
-			s.queueClient.UnSchedule(task.ID, taskQueue+QUEUE_SCHEDULE_POSTFIX)
+		// Verifichiamo che ETA sia stata raggiunta
+		if task.ETA.Before(time.Unix.now()) {
+			log.Printf("ETA %s not yet reached for task %s", task.ETA, taskID)
 			continue
 		}
 
+		// Verifichiamo se il task è stato cancellato
+		if task.State == entities.REVOKED || task.State == entities.KILLED {
+			// Il task revoked, lo rimuoviamo dalla coda di scheduling
+			s.queueClient.UnSchedule(schedTaskItem, taskScheduledQueue)
+			continue
+		}
+	
 		if task.State == entities.RUNNING || task.State == entities.COMPLETED || task.StartMode == entities.MANUAL {
 			// Il task è in esecuzione, completato o con attivazione manuale
 			continue
@@ -255,7 +258,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			task.StartedAt = time.Now()
 			task.SchedulerID = s.Id
 			s.queueClient.SaveTask(task, taskQueue)
-			s.queueClient.UnSchedule(schedTaskItem, taskQueue+QUEUE_SCHEDULE_POSTFIX)
+			s.queueClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 
 			// Set the currentTaskId before executing the task
 			worker.mutex.Lock()
