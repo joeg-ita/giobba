@@ -216,7 +216,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		}
 
 		// Verifichiamo che ETA sia stata raggiunta
-		if task.ETA.Before(time.Unix.now()) {
+		if task.ETA.Before(time.Now()) {
 			log.Printf("ETA %s not yet reached for task %s", task.ETA, taskID)
 			continue
 		}
@@ -227,7 +227,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			s.queueClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 			continue
 		}
-	
+
 		if task.State == entities.RUNNING || task.State == entities.COMPLETED || task.StartMode == entities.MANUAL {
 			// Il task è in esecuzione, completato o con attivazione manuale
 			continue

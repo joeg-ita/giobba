@@ -198,7 +198,7 @@ func TestTasksWithDifferenteDatetime(t *testing.T) {
 		StartMode: entities.AUTO,
 	})
 
-	now := time.Now().Add(5 * time.Second)
+	now = time.Now().Add(5 * time.Second)
 	taskid_after_5_sec, _ := scheduler.AddTask(entities.Task{
 		ID:    uuid.NewString(),
 		Name:  "process",
@@ -212,7 +212,6 @@ func TestTasksWithDifferenteDatetime(t *testing.T) {
 		StartMode: entities.AUTO,
 	})
 
-	
 	tasks := []string{taskid_after_20_sec, taskid_after_5_sec}
 	result := make(map[string]entities.Task)
 
