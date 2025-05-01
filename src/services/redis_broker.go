@@ -190,6 +190,11 @@ func (r *RedisBroker) Close() {
 	r.client.Close()
 }
 
-func (r *RedisBroker) Subscribe(ctx context.Context, channel string) interface{} {
-	return r.client.Subscribe(ctx, channel)
+func (r *RedisBroker) Subscribe(ctx context.Context, channels ...string) interface{} {
+	return r.client.Subscribe(ctx, channels...)
+}
+
+func (r *RedisBroker) Publish(ctx context.Context, channel string, payload string) error {
+	_, err := r.client.Publish(ctx, channel, payload).Result()
+	return err
 }

@@ -26,6 +26,7 @@ type TaskHandlerInt interface {
 const (
 	QUEUE_SCHEDULE_POSTFIX = ":scheduled"
 	PUBSUB_CHANNEL         = "giobba"
+	WORKER_CHANNEL         = "giobba-workers"
 )
 
 type Worker struct {
@@ -118,7 +119,6 @@ func (s *Scheduler) startPubSub() {
 				s.AutoTask(splitted[2], splitted[1])
 			}
 		}
-
 	}
 }
 
@@ -144,6 +144,7 @@ func (s *Scheduler) startWorker(worker *Worker) {
 			// Try to fetch and process a task
 			if time.Now().Unix()%10 == 0 {
 				log.Printf("worker %v (-_-) zzz", worker.Id)
+				s.queueClient.Publish(s.context, WORKER_CHANNEL, fmt.Sprintf("worker %s alive", worker.Id))
 			}
 			err := s.fetchAndProcessTask(worker)
 

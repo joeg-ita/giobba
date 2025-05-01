@@ -26,7 +26,9 @@ type BrokerInt interface {
 
 	UnLock(taskId string, queue string) error
 
-	Subscribe(context context.Context, channel string) interface{}
+	Subscribe(context context.Context, channels ...string) interface{}
+
+	Publish(context context.Context, channel string, payload string) error
 
 	Close()
 }
