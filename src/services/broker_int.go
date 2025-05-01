@@ -28,7 +28,7 @@ type BrokerInt interface {
 
 	Subscribe(context context.Context, channels ...string) interface{}
 
-	Publish(context context.Context, channel string, payload string) error
+	Publish(context context.Context, channel string, payload map[string]interface{}) error
 
 	Close()
 }

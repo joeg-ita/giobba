@@ -37,7 +37,6 @@ func setupTestSuite() {
 	brokerClient := services.NewRedisBrokerByUrl(os.Getenv("GIOBBA_BROKER_URL"))
 	scheduler = services.NewScheduler(context.Background(), brokerClient, []string{"default", "background"}, 1, 1)
 	go giobba.Giobba()
-	go giobba.Giobba()
 }
 
 // teardownTestSuite performs one-time cleanup after all tests have run

@@ -147,7 +147,7 @@ func (r *RedisBroker) Schedule(task entities.Task, queue string) error {
 func (r *RedisBroker) GetScheduled(queue string) ([]string, error) {
 
 	now := time.Now()
-	maxScore := float64(now.Add(1 * time.Second).Unix())
+	maxScore := float64(now.Add(500 * time.Millisecond).Unix())
 
 	// Otteniamo i task pronti per l'esecuzione (con score <= maxScore)
 	taskIDs, err := r.client.ZRangeByScore(context.Background(), queue, &redis.ZRangeBy{
@@ -194,7 +194,11 @@ func (r *RedisBroker) Subscribe(ctx context.Context, channels ...string) interfa
 	return r.client.Subscribe(ctx, channels...)
 }
 
-func (r *RedisBroker) Publish(ctx context.Context, channel string, payload string) error {
-	_, err := r.client.Publish(ctx, channel, payload).Result()
+func (r *RedisBroker) Publish(ctx context.Context, channel string, payload map[string]interface{}) error {
+	message, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = r.client.Publish(ctx, channel, message).Result()
 	return err
 }

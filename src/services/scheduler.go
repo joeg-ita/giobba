@@ -27,6 +27,7 @@ const (
 	QUEUE_SCHEDULE_POSTFIX = ":scheduled"
 	PUBSUB_CHANNEL         = "giobba"
 	WORKER_CHANNEL         = "giobba-workers"
+	HEARTBEAT_INTERVAL     = 5
 )
 
 type Worker struct {
@@ -39,18 +40,20 @@ type Worker struct {
 }
 
 type Scheduler struct {
-	Id             string
-	context        context.Context
-	queueClient    BrokerInt
-	restClient     RestInt
-	Queues         []string
-	Hostname       string
-	Handlers       map[string]TaskHandlerInt
-	MaxWorkers     int
-	Workers        []*Worker
-	LockDuration   time.Duration
-	PollingTimeout time.Duration
-	Mutex          sync.Mutex
+	Id                string
+	context           context.Context
+	queueClient       BrokerInt
+	restClient        RestInt
+	Queues            []string
+	Hostname          string
+	Handlers          map[string]TaskHandlerInt
+	MaxWorkers        int
+	Workers           []*Worker
+	LockDuration      time.Duration
+	PollingTimeout    time.Duration
+	Mutex             sync.Mutex
+	FailedExecutions  int
+	SuccessExecutions int
 }
 
 func NewScheduler(ctx context.Context, queueClient BrokerInt, queues []string, maxWorkers int, lockDuration int) Scheduler {
@@ -72,17 +75,19 @@ func NewScheduler(ctx context.Context, queueClient BrokerInt, queues []string, m
 	}
 
 	return Scheduler{
-		Id:             fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
-		context:        ctx,
-		queueClient:    queueClient,
-		restClient:     NewHttpRest(),
-		Hostname:       hostname,
-		Handlers:       make(map[string]TaskHandlerInt),
-		Queues:         queues,
-		Workers:        workers,
-		MaxWorkers:     maxWorkers,
-		LockDuration:   time.Duration(lockDuration) * time.Second,
-		PollingTimeout: time.Duration(1) * time.Second,
+		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
+		context:           ctx,
+		queueClient:       queueClient,
+		restClient:        NewHttpRest(),
+		Hostname:          hostname,
+		Handlers:          make(map[string]TaskHandlerInt),
+		Queues:            queues,
+		Workers:           workers,
+		MaxWorkers:        maxWorkers,
+		LockDuration:      time.Duration(lockDuration) * time.Second,
+		PollingTimeout:    time.Duration(1) * time.Second,
+		FailedExecutions:  0,
+		SuccessExecutions: 0,
 	}
 }
 
@@ -99,6 +104,7 @@ func (s *Scheduler) Start() {
 		go s.startWorker(s.Workers[i])
 	}
 	go s.startPubSub()
+	go s.heartbeat(s.context)
 }
 
 func (s *Scheduler) startPubSub() {
@@ -118,6 +124,23 @@ func (s *Scheduler) startPubSub() {
 			} else if strings.ToUpper(splitted[0]) == "AUTO" {
 				s.AutoTask(splitted[2], splitted[1])
 			}
+		}
+	}
+}
+
+func (s *Scheduler) heartbeat(context context.Context) {
+	for {
+		if time.Now().Unix()%HEARTBEAT_INTERVAL == 0 {
+			// fmt.Sprintf("worker %s is alive (^_^)", s.Id)
+			s.queueClient.Publish(context, WORKER_CHANNEL, map[string]interface{}{
+				"id":           s.Id,
+				"queues":       s.Queues,
+				"workers":      s.MaxWorkers,
+				"hostname":     s.Hostname,
+				"successTasks": s.SuccessExecutions,
+				"failedTasks":  s.FailedExecutions,
+			})
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -144,7 +167,6 @@ func (s *Scheduler) startWorker(worker *Worker) {
 			// Try to fetch and process a task
 			if time.Now().Unix()%10 == 0 {
 				log.Printf("worker %v (-_-) zzz", worker.Id)
-				s.queueClient.Publish(s.context, WORKER_CHANNEL, fmt.Sprintf("worker %s alive", worker.Id))
 			}
 			err := s.fetchAndProcessTask(worker)
 
@@ -316,10 +338,12 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
 			if task.Callback != "" {
 				go s.callback(task.Callback, task.Result)
 			}
+			s.SuccessExecutions++
 		} else {
 			log.Printf("task %s failed!", task.ID)
 			task.State = entities.FAILED
 			task.Error = err.Error()
+			s.FailedExecutions++
 			if task.CallbackErr != "" {
 				errMsg := map[string]interface{}{
 					"error": task.Error,
