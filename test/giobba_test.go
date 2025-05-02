@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/joeg-ita/giobba"
 	"github.com/joeg-ita/giobba/src/entities"
 	"github.com/joeg-ita/giobba/src/services"
@@ -48,40 +47,27 @@ func TestMainTaskAndSubTasksAutoAndManual(t *testing.T) {
 
 	fmt.Println("TestMainTaskAndSubTasksAutoAndManual...")
 
-	taskid, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: "default",
-		Payload: map[string]interface{}{
-			"user": "a",
-			"job":  "process_A",
-		},
-		StartMode: entities.AUTO,
-	})
+	queue := "default"
+	payload_01 := map[string]interface{}{
+		"user": "sub_a",
+		"job":  "process_subA",
+	}
+	task_01 := entities.NewTask("process", payload_01, queue, time.Now(), 5, entities.AUTO, "")
+	taskid, _ := scheduler.AddTask(task_01)
 
-	taskidAuto, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: "default",
-		Payload: map[string]interface{}{
-			"user": "sub_a",
-			"job":  "process_subA",
-		},
-		StartMode: entities.AUTO,
-		ParentID:  taskid,
-	})
+	payload_02 := map[string]interface{}{
+		"user": "a",
+		"job":  "process_A",
+	}
+	task_02 := entities.NewTask("process", payload_02, queue, time.Now(), 5, entities.AUTO, taskid)
+	taskidAuto, _ := scheduler.AddTask(task_02)
 
-	taskidManual, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: "default",
-		Payload: map[string]interface{}{
-			"user": "sub_b",
-			"job":  "process_subB",
-		},
-		StartMode: entities.MANUAL,
-		ParentID:  taskid,
-	})
+	payload_03 := map[string]interface{}{
+		"user": "sub_b",
+		"job":  "process_subB",
+	}
+	task_03 := entities.NewTask("process", payload_03, queue, time.Now(), 5, entities.MANUAL, taskid)
+	taskidManual, _ := scheduler.AddTask(task_03)
 
 	for {
 		state, _ := scheduler.TaskState(taskid, "default")
@@ -114,44 +100,18 @@ func TestTasksWithSameDatetimeDifferentPriorities(t *testing.T) {
 
 	now := time.Now().Add(5 * time.Second)
 	queue := "background"
-	taskid_p9, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: queue,
-		Payload: map[string]interface{}{
-			"user": "tizio",
-			"job":  "process",
-		},
-		ETA:       now,
-		Priority:  9,
-		StartMode: entities.AUTO,
-	})
+	payload := map[string]interface{}{
+		"user": "sub_a",
+		"job":  "process_subA",
+	}
+	task_p9 := entities.NewTask("process", payload, queue, now, 9, entities.AUTO, "")
+	taskid_p9, _ := scheduler.AddTask(task_p9)
 
-	taskid_p2, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: queue,
-		Payload: map[string]interface{}{
-			"user": "tizio",
-			"job":  "process",
-		},
-		ETA:       now,
-		Priority:  2,
-		StartMode: entities.AUTO,
-	})
+	task_p2 := entities.NewTask("process", payload, queue, now, 2, entities.AUTO, "")
+	taskid_p2, _ := scheduler.AddTask(task_p2)
 
-	taskid_p5, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: queue,
-		Payload: map[string]interface{}{
-			"user": "tizio",
-			"job":  "process",
-		},
-		ETA:       now,
-		Priority:  5,
-		StartMode: entities.AUTO,
-	})
+	task_p5 := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	taskid_p5, _ := scheduler.AddTask(task_p5)
 
 	tasks := []string{taskid_p2, taskid_p5, taskid_p9}
 	result := make(map[string]entities.Task)
@@ -182,34 +142,21 @@ func TestTasksWithDifferenteDatetime(t *testing.T) {
 
 	fmt.Println("TestTasksWithDifferenteDatetime...")
 
-	now := time.Now().Add(20 * time.Second)
-	queue := "background"
-	taskid_after_20_sec, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: queue,
-		Payload: map[string]interface{}{
-			"user": "tizio",
-			"job":  "process",
-		},
-		ETA:       now,
-		Priority:  9,
-		StartMode: entities.AUTO,
-	})
+	base_now := time.Now()
 
-	now = time.Now().Add(5 * time.Second)
-	taskid_after_5_sec, _ := scheduler.AddTask(entities.Task{
-		ID:    uuid.NewString(),
-		Name:  "process",
-		Queue: queue,
-		Payload: map[string]interface{}{
-			"user": "tizio",
-			"job":  "process",
-		},
-		ETA:       now,
-		Priority:  2,
-		StartMode: entities.AUTO,
-	})
+	now := base_now.Add(20 * time.Second)
+	queue := "background"
+
+	payload := map[string]interface{}{
+		"user": "sub_a",
+		"job":  "process_subA",
+	}
+	task_p20 := entities.NewTask("process", payload, queue, now, 9, entities.AUTO, "")
+	taskid_after_20_sec, _ := scheduler.AddTask(task_p20)
+
+	now = base_now.Add(5 * time.Second)
+	task_p5 := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	taskid_after_5_sec, _ := scheduler.AddTask(task_p5)
 
 	tasks := []string{taskid_after_20_sec, taskid_after_5_sec}
 	result := make(map[string]entities.Task)

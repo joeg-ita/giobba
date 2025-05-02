@@ -509,7 +509,11 @@ func (s *Scheduler) AddTask(task entities.Task) (string, error) {
 
 	log.Printf("adding task %v", task)
 
-	task.State = entities.PENDING
+	err := task.Validate()
+	if err != nil {
+		log.Printf("task validation error %v", err)
+		return "", err
+	}
 
 	taskId, err := s.brokerClient.AddTask(task, task.Queue)
 	if err != nil {

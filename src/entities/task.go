@@ -68,6 +68,7 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 		Priority:  priority,
 		StartMode: mode,
 		State:     PENDING,
+		ParentID:  parentId,
 	}
 }
 
