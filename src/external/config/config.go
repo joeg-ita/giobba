@@ -16,11 +16,12 @@ const (
 )
 
 type Database struct {
-	Url      string `yaml:"url" env:"GIOBBA_DATABASE_URL"`
-	Port     string `yaml:"port" env:"GIOBBA_DATABASE_PORT"`
-	Username string `yaml:"username" env:"GIOBBA_DATABASE_ADMIN_USERNAME"`
-	Password string `yaml:"password" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
-	DB       string `yaml:"db" env:"GIOBBA_DATABASE"`
+	Url        string `yaml:"url" env:"GIOBBA_DATABASE_URL"`
+	Port       string `yaml:"port" env:"GIOBBA_DATABASE_PORT"`
+	Username   string `yaml:"username" env:"GIOBBA_DATABASE_ADMIN_USERNAME"`
+	Password   string `yaml:"password" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
+	DB         string `yaml:"db" env:"GIOBBA_DATABASE"`
+	Collection string `yaml:"collection" env:"GIOBBA_DATABASE_COLLECTION"`
 }
 
 type Broker struct {

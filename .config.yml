@@ -9,7 +9,8 @@ database:
   port: 27017
   username: user
   password: pass
-  db: test
+  db: giobba
+  collection: tasks
 
 broker:
   url: 0.0.0.0
