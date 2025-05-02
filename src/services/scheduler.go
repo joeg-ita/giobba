@@ -25,8 +25,9 @@ type TaskHandlerInt interface {
 
 const (
 	QUEUE_SCHEDULE_POSTFIX = ":scheduled"
-	PUBSUB_CHANNEL         = "giobba"
-	WORKER_CHANNEL         = "giobba-workers"
+	SERVICES_CHANNEL       = "giobba-services"
+	HEARTBEATS_CHANNEL     = "giobba-heartbeats"
+	ACTIVITIES_CHANNEL     = "giobba-activities"
 	HEARTBEAT_INTERVAL     = 5
 )
 
@@ -108,8 +109,8 @@ func (s *Scheduler) Start() {
 }
 
 func (s *Scheduler) startPubSub() {
-	log.Printf("subscribing channel %s", PUBSUB_CHANNEL)
-	pubsub := (s.queueClient.Subscribe(s.context, PUBSUB_CHANNEL)).(*redis.PubSub)
+	log.Printf("subscribing channel %s", SERVICES_CHANNEL)
+	pubsub := (s.queueClient.Subscribe(s.context, SERVICES_CHANNEL)).(*redis.PubSub)
 	defer pubsub.Close()
 	ch := pubsub.Channel()
 
@@ -132,7 +133,7 @@ func (s *Scheduler) heartbeat(context context.Context) {
 	for {
 		if time.Now().Unix()%HEARTBEAT_INTERVAL == 0 {
 			// fmt.Sprintf("worker %s is alive (^_^)", s.Id)
-			s.queueClient.Publish(context, WORKER_CHANNEL, map[string]interface{}{
+			s.queueClient.Publish(context, HEARTBEATS_CHANNEL, map[string]interface{}{
 				"id":           s.Id,
 				"queues":       s.Queues,
 				"workers":      s.MaxWorkers,
@@ -283,21 +284,32 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			s.queueClient.SaveTask(task, taskQueue)
 			s.queueClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 
+			s.queueClient.Publish(worker.context, ACTIVITIES_CHANNEL, map[string]interface{}{
+				"workerId": worker.Id,
+				"task":     task,
+			})
+
 			// Set the currentTaskId before executing the task
 			worker.mutex.Lock()
 			worker.currentTaskId = task.ID
 			worker.mutex.Unlock()
 
-			err := s.executeTask(worker, task)
+			task, err := s.executeTask(worker, task)
 
 			// Clear the currentTaskId after execution
 			worker.mutex.Lock()
 			worker.currentTaskId = ""
 			worker.mutex.Unlock()
 
+			s.queueClient.Publish(worker.context, ACTIVITIES_CHANNEL, map[string]interface{}{
+				"workerId": worker.Id,
+				"task":     task,
+			})
+
 			if err != nil {
 				return err
 			}
+
 		}
 	}
 
@@ -305,7 +317,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 }
 
 // Update the executeTask method to check for context cancellation
-func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
+func (s *Scheduler) executeTask(worker *Worker, task entities.Task) (entities.Task, error) {
 	log.Printf("worker %v is executing task %v", worker.Id, task.ID)
 
 	worker.mutex.Lock()
@@ -355,7 +367,7 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
 		s.queueClient.SaveTask(task, task.Queue)
 		s.queueClient.UnLock(task.ID, task.Queue)
 
-		return err
+		return task, err
 	case <-worker.context.Done():
 		// Task was cancelled
 		log.Printf("task %s cancelled", task.ID)
@@ -372,9 +384,8 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) error {
 			go s.callback(task.CallbackErr, errMsg)
 		}
 
-		return errorMsg
+		return task, errorMsg
 	}
-
 }
 
 // Update KillTask to properly handle cancellation
