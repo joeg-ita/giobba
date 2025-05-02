@@ -20,7 +20,7 @@ func setupTestDB() (*services.MongodbDatabase, func()) {
 		Collection: "test_tasks",
 	}
 
-	db := services.NewMongodbDatabase(cfg)
+	db, _ := services.NewMongodbDatabase(cfg)
 	ctx := context.Background()
 
 	// Cleanup function to drop the test collection and close the connection
@@ -30,7 +30,7 @@ func setupTestDB() (*services.MongodbDatabase, func()) {
 		db.Close(ctx)
 	}
 
-	return &db, cleanup
+	return db, cleanup
 }
 
 func TestSaveTask(t *testing.T) {

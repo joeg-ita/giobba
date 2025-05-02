@@ -3,6 +3,7 @@ package giobba
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,6 +24,13 @@ func Giobba() {
 	defer cancel()
 
 	scheduler := services.NewScheduler(ctx, brokerClient, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
+
+	dbClient, err := services.NewMongodbDatabase(cfg.Database)
+	if err != nil {
+		log.Printf("unable to load database client")
+	} else {
+		scheduler.AddDbClient(dbClient)
+	}
 
 	giobba := usecases.NewGiobbaStart(&scheduler)
 	giobba.Run()

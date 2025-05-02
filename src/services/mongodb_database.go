@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/joeg-ita/giobba/src/entities"
 	"github.com/joeg-ita/giobba/src/external/config"
@@ -17,17 +18,18 @@ type MongodbDatabase struct {
 	collection string
 }
 
-func NewMongodbDatabase(cfg config.Database) MongodbDatabase {
+func NewMongodbDatabase(cfg config.Database) (*MongodbDatabase, error) {
 	Client, err := mongo.Connect(options.Client().ApplyURI(cfg.Url))
 	if err != nil {
-		panic(err)
+		log.Println("error starting mongodb client", err)
+		return nil, err
 	}
 
-	return MongodbDatabase{
+	return &MongodbDatabase{
 		Client:     Client,
 		database:   cfg.DB,
 		collection: cfg.Collection,
-	}
+	}, nil
 }
 
 func (m *MongodbDatabase) SaveTask(ctx context.Context, task entities.Task) (string, error) {
