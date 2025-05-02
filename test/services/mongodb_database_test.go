@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) (*services.MongodbDatabase, func()) {
+func setupTestDB() (*services.MongodbDatabase, func()) {
 	// Use a test database configuration
 	cfg := config.Database{
 		Url:        "mongodb://localhost:27017",
@@ -34,7 +34,7 @@ func setupTestDB(t *testing.T) (*services.MongodbDatabase, func()) {
 }
 
 func TestSaveTask(t *testing.T) {
-	db, cleanup := setupTestDB(t)
+	db, cleanup := setupTestDB()
 	defer cleanup()
 
 	ctx := context.Background()
@@ -58,9 +58,6 @@ func TestSaveTask(t *testing.T) {
 		id, err := db.SaveTask(ctx, task)
 		require.NoError(t, err)
 		assert.Equal(t, task.ID, id)
-
-		time.Sleep(60 * time.Second)
-
 		// Verify task was saved
 		savedTask, err := db.GetTask(ctx, task.ID)
 		require.NoError(t, err)
@@ -108,7 +105,7 @@ func TestSaveTask(t *testing.T) {
 }
 
 func TestGetTask(t *testing.T) {
-	db, cleanup := setupTestDB(t)
+	db, cleanup := setupTestDB()
 	defer cleanup()
 
 	ctx := context.Background()
@@ -154,7 +151,7 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestGetTasks(t *testing.T) {
-	db, cleanup := setupTestDB(t)
+	db, cleanup := setupTestDB()
 	defer cleanup()
 
 	ctx := context.Background()
