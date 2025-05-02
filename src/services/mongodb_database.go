@@ -12,38 +12,32 @@ import (
 )
 
 type MongodbDatabase struct {
-	client     *mongo.Client
+	Client     *mongo.Client
 	database   string
 	collection string
 }
 
 func NewMongodbDatabase(cfg config.Database) MongodbDatabase {
-	client, err := mongo.Connect(options.Client().ApplyURI(cfg.Url))
+	Client, err := mongo.Connect(options.Client().ApplyURI(cfg.Url))
 	if err != nil {
 		panic(err)
 	}
 
 	return MongodbDatabase{
-		client:     client,
+		Client:     Client,
 		database:   cfg.DB,
 		collection: cfg.Collection,
 	}
 }
 
 func (m *MongodbDatabase) SaveTask(ctx context.Context, task entities.Task) (string, error) {
-	collection := m.client.Database(m.database).Collection(m.collection)
-
-	// Convert task to BSON document
-	doc, err := bson.Marshal(task)
-	if err != nil {
-		return "", err
-	}
+	collection := m.Client.Database(m.database).Collection(m.collection)
 
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: task.ID}}
 
-	// Create update with $set operator
-	update := bson.D{{Key: "$set", Value: doc}}
+	// Create update with $set operator using the task struct directly
+	update := bson.D{{Key: "$set", Value: task}}
 
 	// Perform update operation
 	result, err := collection.UpdateOne(ctx, filter, update)
@@ -53,6 +47,25 @@ func (m *MongodbDatabase) SaveTask(ctx context.Context, task entities.Task) (str
 
 	// If no document was updated, insert a new one
 	if result.MatchedCount == 0 {
+		// Create a document with _id explicitly set
+		doc := bson.D{
+			{Key: "_id", Value: task.ID},
+		}
+		// Convert task to BSON document
+		taskDoc, err := bson.Marshal(task)
+		if err != nil {
+			return "", err
+		}
+		var taskMap bson.M
+		if err := bson.Unmarshal(taskDoc, &taskMap); err != nil {
+			return "", err
+		}
+		// Add all other task fields
+		for k, v := range taskMap {
+			if k != "_id" { // Skip _id as we already set it
+				doc = append(doc, bson.E{Key: k, Value: v})
+			}
+		}
 		_, err = collection.InsertOne(ctx, doc)
 		if err != nil {
 			return "", err
@@ -67,7 +80,7 @@ func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (entities.
 		return entities.Task{}, fmt.Errorf("task ID cannot be empty")
 	}
 
-	collection := m.client.Database(m.database).Collection(m.collection)
+	collection := m.Client.Database(m.database).Collection(m.collection)
 
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: taskId}}
@@ -86,12 +99,14 @@ func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (entities.
 }
 
 func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]entities.Task, error) {
-	collection := m.client.Database(m.database).Collection(m.collection)
+	collection := m.Client.Database(m.database).Collection(m.collection)
 
 	// Create filter based on query string
-	var filter bson.D
+	var filter bson.M
 	if query != "" {
-		filter = bson.D{{Key: "$text", Value: bson.D{{Key: "$search", Value: query}}}}
+		filter = bson.M{"$text": bson.M{"$search": query}}
+	} else {
+		filter = bson.M{}
 	}
 
 	// Create find options for pagination and sorting
@@ -101,9 +116,9 @@ func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, 
 
 	// Add sorting if specified
 	if len(sort) > 0 {
-		sortDoc := bson.D{}
+		sortDoc := bson.M{}
 		for field, direction := range sort {
-			sortDoc = append(sortDoc, bson.E{Key: field, Value: direction})
+			sortDoc[field] = direction
 		}
 		findOptions.SetSort(sortDoc)
 	}
@@ -125,10 +140,10 @@ func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, 
 }
 
 func (m *MongodbDatabase) Close(ctx context.Context) {
-	if m.client != nil {
-		if err := m.client.Disconnect(ctx); err != nil {
+	if m.Client != nil {
+		if err := m.Client.Disconnect(ctx); err != nil {
 			// Log error but don't return it since this is a cleanup operation
-			fmt.Printf("Error disconnecting MongoDB client: %v\n", err)
+			fmt.Printf("Error disconnecting MongoDB Client: %v\n", err)
 		}
 	}
 }
