@@ -52,21 +52,21 @@ func TestMainTaskAndSubTasksAutoAndManual(t *testing.T) {
 		"user": "sub_a",
 		"job":  "process_subA",
 	}
-	task_01 := entities.NewTask("process", payload_01, queue, time.Now(), 5, entities.AUTO, "")
+	task_01, _ := entities.NewTask("process", payload_01, queue, time.Now(), 5, entities.AUTO, "")
 	taskid, _ := scheduler.AddTask(task_01)
 
 	payload_02 := map[string]interface{}{
 		"user": "a",
 		"job":  "process_A",
 	}
-	task_02 := entities.NewTask("process", payload_02, queue, time.Now(), 5, entities.AUTO, taskid)
+	task_02, _ := entities.NewTask("process", payload_02, queue, time.Now(), 5, entities.AUTO, taskid)
 	taskidAuto, _ := scheduler.AddTask(task_02)
 
 	payload_03 := map[string]interface{}{
 		"user": "sub_b",
 		"job":  "process_subB",
 	}
-	task_03 := entities.NewTask("process", payload_03, queue, time.Now(), 5, entities.MANUAL, taskid)
+	task_03, _ := entities.NewTask("process", payload_03, queue, time.Now(), 5, entities.MANUAL, taskid)
 	taskidManual, _ := scheduler.AddTask(task_03)
 
 	for {
@@ -104,13 +104,13 @@ func TestTasksWithSameDatetimeDifferentPriorities(t *testing.T) {
 		"user": "sub_a",
 		"job":  "process_subA",
 	}
-	task_p9 := entities.NewTask("process", payload, queue, now, 9, entities.AUTO, "")
+	task_p9, _ := entities.NewTask("process", payload, queue, now, 9, entities.AUTO, "")
 	taskid_p9, _ := scheduler.AddTask(task_p9)
 
-	task_p2 := entities.NewTask("process", payload, queue, now, 2, entities.AUTO, "")
+	task_p2, _ := entities.NewTask("process", payload, queue, now, 2, entities.AUTO, "")
 	taskid_p2, _ := scheduler.AddTask(task_p2)
 
-	task_p5 := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	task_p5, _ := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
 	taskid_p5, _ := scheduler.AddTask(task_p5)
 
 	tasks := []string{taskid_p2, taskid_p5, taskid_p9}
@@ -151,11 +151,11 @@ func TestTasksWithDifferenteDatetime(t *testing.T) {
 		"user": "sub_a",
 		"job":  "process_subA",
 	}
-	task_p20 := entities.NewTask("process", payload, queue, now, 9, entities.AUTO, "")
+	task_p20, _ := entities.NewTask("process", payload, queue, now, 9, entities.AUTO, "")
 	taskid_after_20_sec, _ := scheduler.AddTask(task_p20)
 
 	now = base_now.Add(5 * time.Second)
-	task_p5 := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	task_p5, _ := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
 	taskid_after_5_sec, _ := scheduler.AddTask(task_p5)
 
 	tasks := []string{taskid_after_20_sec, taskid_after_5_sec}

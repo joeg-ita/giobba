@@ -21,11 +21,11 @@ func TestValidateTaskRequiredFields(t *testing.T) {
 		"job":  "process",
 	}
 
-	task := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	_, err := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
 
-	log.Printf("Task validate %v", task.Validate())
-	if task.Validate() != nil {
-		t.Error(task.Validate().Error())
+	log.Printf("Task validate %v", err)
+	if err != nil {
+		t.Error(err.Error())
 	}
 
 }
@@ -42,7 +42,7 @@ func TestValidateTaskId(t *testing.T) {
 		"job":  "process",
 	}
 
-	task := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	task, _ := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
 
 	task.ID = task.ID[:8]
 

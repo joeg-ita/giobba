@@ -53,13 +53,13 @@ type Task struct {
 	CallbackErr string                 `json:"callback_err,omitempty"`
 }
 
-func NewTask(name string, payload map[string]interface{}, queue string, eta time.Time, priority int, mode StartMode, parentId string) Task {
+func NewTask(name string, payload map[string]interface{}, queue string, eta time.Time, priority int, mode StartMode, parentId string) (Task, error) {
 	id := uuid.New().String()
 	if parentId == "" {
 		parentId = id
 	}
 
-	return Task{
+	task := Task{
 		ID:        id,
 		Name:      name,
 		Payload:   payload,
@@ -70,6 +70,13 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 		State:     PENDING,
 		ParentID:  parentId,
 	}
+
+	err := task.Validate()
+	if err != nil {
+		return Task{}, err
+	}
+
+	return task, nil
 }
 
 func (t *Task) Validate() error {
