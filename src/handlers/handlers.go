@@ -10,11 +10,89 @@ import (
 	"github.com/joeg-ita/giobba/src/services"
 )
 
-var Handlers = map[string]services.TaskHandlerInt{
-	"process": &Process{},
+// BaseHandler provides a base implementation that users can embed in their custom handlers
+type BaseHandler struct {
+	Name string
 }
 
+// Run is the base implementation that users can override
+func (h *BaseHandler) Run(ctx context.Context, task domain.Task) error {
+	return fmt.Errorf("Run method must be implemented by custom handler")
+}
+
+// Helper function to create a new task
+func NewTask(name string, payload map[string]interface{}, queue string, eta time.Time, priority int, mode domain.StartMode, parentId string) (domain.Task, error) {
+	return domain.NewTask(name, payload, queue, eta, priority, mode, parentId)
+}
+
+// Helper function to create a task with default values
+func NewDefaultTask(name string, payload map[string]interface{}, queue string) (domain.Task, error) {
+	return domain.NewTask(
+		name,
+		payload,
+		queue,
+		time.Now(),
+		5, // default priority
+		domain.AUTO,
+		"",
+	)
+}
+
+// Helper function to create a child task
+func NewChildTask(name string, payload map[string]interface{}, queue string, parentId string) (domain.Task, error) {
+	return domain.NewTask(
+		name,
+		payload,
+		queue,
+		time.Now(),
+		5, // default priority
+		domain.AUTO,
+		parentId,
+	)
+}
+
+// Helper function to create a manual task
+func NewManualTask(name string, payload map[string]interface{}, queue string) (domain.Task, error) {
+	return domain.NewTask(
+		name,
+		payload,
+		queue,
+		time.Now(),
+		5, // default priority
+		domain.MANUAL,
+		"",
+	)
+}
+
+// Helper function to create a high priority task
+func NewHighPriorityTask(name string, payload map[string]interface{}, queue string) (domain.Task, error) {
+	return domain.NewTask(
+		name,
+		payload,
+		queue,
+		time.Now(),
+		10, // high priority
+		domain.AUTO,
+		"",
+	)
+}
+
+// Helper function to create a scheduled task
+func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time) (domain.Task, error) {
+	return domain.NewTask(
+		name,
+		payload,
+		queue,
+		eta,
+		5, // default priority
+		domain.AUTO,
+		"",
+	)
+}
+
+// Example of a custom handler implementation
 type Process struct {
+	BaseHandler
 }
 
 func (t *Process) Run(ctx context.Context, task domain.Task) error {
@@ -36,4 +114,9 @@ func (t *Process) Run(ctx context.Context, task domain.Task) error {
 		time.Sleep(time.Duration(1000) * time.Millisecond)
 	}
 	return nil
+}
+
+// Register all handlers
+var Handlers = map[string]services.TaskHandlerInt{
+	"process": &Process{},
 }

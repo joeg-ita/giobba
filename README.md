@@ -126,5 +126,167 @@ scheduler.AutoTask(taskId, "default")
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+# Giobba Task Scheduler
+
+Giobba is a flexible task scheduling system that allows you to create and manage tasks with different priorities, scheduling options, and execution modes.
+
+## Creating Custom Task Handlers
+
+To create a custom task handler, you can embed the `BaseHandler` struct and implement the `Run` method. Here's an example:
+
+```go
+package myhandlers
+
+import (
+    "context"
+    "github.com/joeg-ita/giobba/src/domain"
+    "github.com/joeg-ita/giobba/src/handlers"
+)
+
+// MyCustomHandler implements a custom task handler
+type MyCustomHandler struct {
+    handlers.BaseHandler
+    // Add any custom fields here
+}
+
+// Run implements the task execution logic
+func (h *MyCustomHandler) Run(ctx context.Context, task domain.Task) error {
+    // Access task payload
+    payload := task.Payload
+    
+    // Your custom logic here
+    // ...
+    
+    // Check for cancellation
+    select {
+    case <-ctx.Done():
+        return fmt.Errorf("task cancelled")
+    default:
+        // Continue with work
+    }
+    
+    return nil
+}
+```
+
+## Creating Tasks
+
+The package provides several helper functions to create tasks with different configurations:
+
+### Basic Task
+```go
+task, err := handlers.NewDefaultTask(
+    "my-task",
+    map[string]interface{}{
+        "key": "value",
+    },
+    "my-queue",
+)
+```
+
+### Child Task
+```go
+task, err := handlers.NewChildTask(
+    "child-task",
+    map[string]interface{}{
+        "key": "value",
+    },
+    "my-queue",
+    parentTaskId,
+)
+```
+
+### Manual Task
+```go
+task, err := handlers.NewManualTask(
+    "manual-task",
+    map[string]interface{}{
+        "key": "value",
+    },
+    "my-queue",
+)
+```
+
+### High Priority Task
+```go
+task, err := handlers.NewHighPriorityTask(
+    "high-priority-task",
+    map[string]interface{}{
+        "key": "value",
+    },
+    "my-queue",
+)
+```
+
+### Scheduled Task
+```go
+task, err := handlers.NewScheduledTask(
+    "scheduled-task",
+    map[string]interface{}{
+        "key": "value",
+    },
+    "my-queue",
+    time.Now().Add(1 * time.Hour),
+)
+```
+
+## Task Properties
+
+Tasks have several configurable properties:
+
+- `Name`: Unique identifier for the task type
+- `Payload`: Map of data to be processed by the handler
+- `Queue`: Queue where the task will be processed
+- `State`: Current state of the task (PENDING, RUNNING, COMPLETED, FAILED, REVOKED, KILLED)
+- `ETA`: Expected time of arrival/execution
+- `Priority`: Task priority (0-10, higher is more important)
+- `StartMode`: AUTO or MANUAL
+- `ParentID`: ID of the parent task (for task chains)
+- `Callback`: URL to call when task completes successfully
+- `CallbackErr`: URL to call when task fails
+
+## Best Practices
+
+1. Always check for context cancellation in long-running tasks
+2. Use appropriate task priorities based on importance
+3. Implement proper error handling and logging
+4. Use callbacks for task completion notifications
+5. Consider using child tasks for complex workflows
+6. Set appropriate ETA values for scheduled tasks
+
+## Example Workflow
+
+```go
+// Create a parent task
+parentTask, err := handlers.NewDefaultTask(
+    "parent-task",
+    map[string]interface{}{
+        "data": "parent-data",
+    },
+    "my-queue",
+)
+
+// Create child tasks
+childTask1, err := handlers.NewChildTask(
+    "child-task-1",
+    map[string]interface{}{
+        "data": "child-1-data",
+    },
+    "my-queue",
+    parentTask.ID,
+)
+
+childTask2, err := handlers.NewChildTask(
+    "child-task-2",
+    map[string]interface{}{
+        "data": "child-2-data",
+    },
+    "my-queue",
+    parentTask.ID,
+)
+```
+
+This creates a workflow where child tasks will only execute after the parent task completes successfully.
+
 
 

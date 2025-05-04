@@ -11,6 +11,7 @@ import (
 	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/handlers"
 	"github.com/joeg-ita/giobba/src/services"
+	"github.com/joeg-ita/giobba/src/usecases"
 	"github.com/joeg-ita/giobba/src/utils"
 )
 
@@ -24,7 +25,7 @@ func Giobba() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	scheduler := services.NewScheduler(ctx, brokerClient, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
+	scheduler := usecases.NewScheduler(ctx, brokerClient, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
 
 	dbClient, err := services.NewMongodbDatabase(cfg.Database)
 	if err != nil {
