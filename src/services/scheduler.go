@@ -20,8 +20,6 @@ type TaskHandlerInt interface {
 	Run(ctx context.Context, task domain.Task) error
 }
 
-// type TaskHandler func(ctx context.Context, task entities.Task) error
-
 const (
 	QUEUE_SCHEDULE_POSTFIX = ":scheduled"
 	SERVICES_CHANNEL       = "giobba-services"
