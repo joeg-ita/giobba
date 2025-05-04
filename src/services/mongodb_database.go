@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/joeg-ita/giobba/src/entities"
-	"github.com/joeg-ita/giobba/src/external/config"
+	"github.com/joeg-ita/giobba/src/config"
+	"github.com/joeg-ita/giobba/src/domain"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -32,7 +32,7 @@ func NewMongodbDatabase(cfg config.Database) (*MongodbDatabase, error) {
 	}, nil
 }
 
-func (m *MongodbDatabase) SaveTask(ctx context.Context, task entities.Task) (string, error) {
+func (m *MongodbDatabase) SaveTask(ctx context.Context, task domain.Task) (string, error) {
 	collection := m.Client.Database(m.database).Collection(m.collection)
 
 	// Create filter to match by ID
@@ -77,9 +77,9 @@ func (m *MongodbDatabase) SaveTask(ctx context.Context, task entities.Task) (str
 	return task.ID, nil
 }
 
-func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (entities.Task, error) {
+func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (domain.Task, error) {
 	if taskId == "" {
-		return entities.Task{}, fmt.Errorf("task ID cannot be empty")
+		return domain.Task{}, fmt.Errorf("task ID cannot be empty")
 	}
 
 	collection := m.Client.Database(m.database).Collection(m.collection)
@@ -88,19 +88,19 @@ func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (entities.
 	filter := bson.D{{Key: "_id", Value: taskId}}
 
 	// Retrieves the first matching document
-	var task entities.Task
+	var task domain.Task
 	err := collection.FindOne(ctx, filter).Decode(&task)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return entities.Task{}, fmt.Errorf("task not found: %s", taskId)
+			return domain.Task{}, fmt.Errorf("task not found: %s", taskId)
 		}
-		return entities.Task{}, fmt.Errorf("failed to get task: %w", err)
+		return domain.Task{}, fmt.Errorf("failed to get task: %w", err)
 	}
 	return task, nil
 }
 
-func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]entities.Task, error) {
+func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Task, error) {
 	collection := m.Client.Database(m.database).Collection(m.collection)
 
 	// Create filter based on query string
@@ -133,7 +133,7 @@ func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, 
 	defer cursor.Close(ctx)
 
 	// Decode results into tasks slice
-	var tasks []entities.Task
+	var tasks []domain.Task
 	if err = cursor.All(ctx, &tasks); err != nil {
 		return nil, fmt.Errorf("failed to decode tasks: %w", err)
 	}

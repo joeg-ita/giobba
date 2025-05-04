@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joeg-ita/giobba/src/entities"
+	"github.com/joeg-ita/giobba/src/domain"
 )
 
 func TestValidateTaskRequiredFields(t *testing.T) {
@@ -21,7 +21,7 @@ func TestValidateTaskRequiredFields(t *testing.T) {
 		"job":  "process",
 	}
 
-	_, err := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	_, err := domain.NewTask("process", payload, queue, now, 5, domain.AUTO, "")
 
 	log.Printf("Task validate %v", err)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestValidateTaskId(t *testing.T) {
 		"job":  "process",
 	}
 
-	task, _ := entities.NewTask("process", payload, queue, now, 5, entities.AUTO, "")
+	task, _ := domain.NewTask("process", payload, queue, now, 5, domain.AUTO, "")
 
 	task.ID = task.ID[:8]
 

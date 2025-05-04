@@ -11,14 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/joeg-ita/giobba/src/entities"
-
 	"github.com/google/uuid"
+	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/redis/go-redis/v9"
 )
 
 type TaskHandlerInt interface {
-	Run(ctx context.Context, task entities.Task) error
+	Run(ctx context.Context, task domain.Task) error
 }
 
 // type TaskHandler func(ctx context.Context, task entities.Task) error
@@ -251,19 +250,19 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		}
 
 		// Verifichiamo se il task è stato cancellato
-		if task.State == entities.REVOKED || task.State == entities.KILLED {
+		if task.State == domain.REVOKED || task.State == domain.KILLED {
 			// Il task revoked, lo rimuoviamo dalla coda di scheduling
 			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 			continue
 		}
 
-		if task.State == entities.RUNNING || task.State == entities.COMPLETED || task.StartMode == entities.MANUAL {
+		if task.State == domain.RUNNING || task.State == domain.COMPLETED || task.StartMode == domain.MANUAL {
 			// Il task è in esecuzione, completato o con attivazione manuale
 			continue
 		}
 
 		// Verifichiamo se il task è in attesa di attivazione manuale
-		if task.StartMode == entities.AUTO && task.ParentID != task.ID {
+		if task.StartMode == domain.AUTO && task.ParentID != task.ID {
 			// Se non è in modalità auto-attivazione e ha un parent, verifichiamo lo stato del parent
 			parentTask, err := s.brokerClient.GetTask(task.ParentID, taskQueue)
 			if err == redis.Nil {
@@ -275,7 +274,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			}
 
 			// Verifichiamo se il parent è completo
-			if parentTask.State != entities.COMPLETED {
+			if parentTask.State != domain.COMPLETED {
 				continue
 			}
 		}
@@ -283,7 +282,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		// Proviamo ad acquisire il lock per il task
 		if s.brokerClient.Lock(taskID, taskQueue, s.LockDuration) {
 			task.WorkerID = worker.Id
-			task.State = entities.RUNNING
+			task.State = domain.RUNNING
 			task.StartedAt = time.Now()
 			task.SchedulerID = s.Id
 			s.brokerClient.SaveTask(task, taskQueue)
@@ -316,7 +315,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 }
 
 // Update the executeTask method to check for context cancellation
-func (s *Scheduler) executeTask(worker *Worker, task entities.Task) (entities.Task, error) {
+func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, error) {
 	log.Printf("worker %v is executing task %v", worker.Id, task.ID)
 
 	worker.mutex.Lock()
@@ -344,7 +343,7 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) (entities.Ta
 		// Task completed normally
 		if err == nil {
 			log.Printf("task %s completed!", task.ID)
-			task.State = entities.COMPLETED
+			task.State = domain.COMPLETED
 			task.CompletedAt = time.Now()
 			if task.Callback != "" {
 				go s.callback(task.Callback, task.Result)
@@ -352,7 +351,7 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) (entities.Ta
 			s.SuccessExecutions++
 		} else {
 			log.Printf("task %s failed!", task.ID)
-			task.State = entities.FAILED
+			task.State = domain.FAILED
 			task.Error = err.Error()
 			s.FailedExecutions++
 			if task.CallbackErr != "" {
@@ -371,7 +370,7 @@ func (s *Scheduler) executeTask(worker *Worker, task entities.Task) (entities.Ta
 		// Task was cancelled
 		log.Printf("task %s cancelled", task.ID)
 		errorMsg := fmt.Errorf("task cancelled")
-		task.State = entities.KILLED
+		task.State = domain.KILLED
 		task.CompletedAt = time.Now()
 		task.Error = errorMsg.Error()
 		s.brokerClient.SaveTask(task, task.Queue)
@@ -395,8 +394,8 @@ func (s *Scheduler) KillTask(taskID string, queue string) error {
 		return fmt.Errorf("failed to find task %s: %v", taskID, err)
 	}
 
-	if task.State != entities.RUNNING {
-		log.Printf("task %v not in %v state", taskID, entities.RUNNING)
+	if task.State != domain.RUNNING {
+		log.Printf("task %v not in %v state", taskID, domain.RUNNING)
 		return nil
 	}
 
@@ -441,11 +440,11 @@ func (s *Scheduler) RevokeTask(taskID string, queue string) error {
 			return fmt.Errorf("failed to find task %s: %v", taskID, err)
 		}
 
-		if task.State != entities.PENDING {
-			log.Printf("task %v not in %v state", taskID, entities.PENDING)
+		if task.State != domain.PENDING {
+			log.Printf("task %v not in %v state", taskID, domain.PENDING)
 			return nil
 		}
-		task.State = entities.REVOKED
+		task.State = domain.REVOKED
 		_, err = s.brokerClient.SaveTask(task, queue)
 		s.brokerClient.UnLock(taskID, queue)
 
@@ -468,11 +467,11 @@ func (s *Scheduler) AutoTask(taskID string, queue string) error {
 			return fmt.Errorf("failed to find task %s: %v", taskID, err)
 		}
 
-		if task.State != entities.PENDING {
-			log.Printf("task %v not in %v state", taskID, entities.PENDING)
+		if task.State != domain.PENDING {
+			log.Printf("task %v not in %v state", taskID, domain.PENDING)
 			return nil
 		}
-		task.StartMode = entities.AUTO
+		task.StartMode = domain.AUTO
 		_, err = s.brokerClient.SaveTask(task, queue)
 		s.brokerClient.UnLock(taskID, queue)
 
@@ -485,7 +484,7 @@ func (s *Scheduler) AutoTask(taskID string, queue string) error {
 	return nil
 }
 
-func (s *Scheduler) TaskState(taskID string, queue string) (entities.TaskState, error) {
+func (s *Scheduler) TaskState(taskID string, queue string) (domain.TaskState, error) {
 
 	task, err := s.Task(taskID, queue)
 	if err != nil {
@@ -495,17 +494,17 @@ func (s *Scheduler) TaskState(taskID string, queue string) (entities.TaskState, 
 	return task.State, nil
 }
 
-func (s *Scheduler) Task(taskID string, queue string) (entities.Task, error) {
+func (s *Scheduler) Task(taskID string, queue string) (domain.Task, error) {
 
 	task, err := s.brokerClient.GetTask(taskID, queue)
 	if err != nil {
-		return entities.Task{}, fmt.Errorf("failed to find task %s: %v", taskID, err)
+		return domain.Task{}, fmt.Errorf("failed to find task %s: %v", taskID, err)
 	}
 	log.Printf("retrieved Task %v", task.ID)
 	return task, nil
 }
 
-func (s *Scheduler) AddTask(task entities.Task) (string, error) {
+func (s *Scheduler) AddTask(task domain.Task) (string, error) {
 
 	log.Printf("adding task %v", task)
 
@@ -534,7 +533,7 @@ func (s *Scheduler) callback(url string, payload map[string]interface{}) {
 	}
 }
 
-func (s *Scheduler) notify(ctx context.Context, task entities.Task) {
+func (s *Scheduler) notify(ctx context.Context, task domain.Task) {
 
 	s.brokerClient.Publish(ctx, ACTIVITIES_CHANNEL, map[string]interface{}{
 		"workerId": task.WorkerID,

@@ -4,19 +4,19 @@ import (
 	"context"
 	"time"
 
-	"github.com/joeg-ita/giobba/src/entities"
+	"github.com/joeg-ita/giobba/src/domain"
 )
 
 type BrokerInt interface {
-	AddTask(task entities.Task, queue string) (string, error)
+	AddTask(task domain.Task, queue string) (string, error)
 
-	SaveTask(task entities.Task, queue string) (string, error)
+	SaveTask(task domain.Task, queue string) (string, error)
 
-	GetTask(taskId string, queue string) (entities.Task, error)
+	GetTask(taskId string, queue string) (domain.Task, error)
 
 	DeleteTask(taskId string, queue string) error
 
-	Schedule(task entities.Task, queue string) error
+	Schedule(task domain.Task, queue string) error
 
 	UnSchedule(taskId string, queue string) error
 

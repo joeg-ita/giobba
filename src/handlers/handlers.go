@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/joeg-ita/giobba/src/entities"
+	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
 )
 
@@ -17,7 +17,7 @@ var Handlers = map[string]services.TaskHandlerInt{
 type Process struct {
 }
 
-func (t *Process) Run(ctx context.Context, task entities.Task) error {
+func (t *Process) Run(ctx context.Context, task domain.Task) error {
 	log.Printf("Processing task: %s", task.Name)
 
 	for i := 0; i < 5; i++ {

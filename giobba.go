@@ -8,9 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/joeg-ita/giobba/src/external/config"
+	"github.com/joeg-ita/giobba/src/config"
+	"github.com/joeg-ita/giobba/src/handlers"
 	"github.com/joeg-ita/giobba/src/services"
-	"github.com/joeg-ita/giobba/src/usecases"
+	"github.com/joeg-ita/giobba/src/utils"
 )
 
 func Giobba() {
@@ -32,8 +33,13 @@ func Giobba() {
 		scheduler.AddDbClient(dbClient)
 	}
 
-	giobba := usecases.NewGiobbaStart(&scheduler)
-	giobba.Run()
+	for name, handler := range handlers.Handlers {
+		if utils.CheckInterface(handler) {
+			scheduler.RegisterHandler(name, handler)
+		}
+	}
+
+	scheduler.Start()
 
 	// graceful shutdown
 	c := make(chan os.Signal, 1)

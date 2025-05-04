@@ -8,7 +8,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/joeg-ita/giobba/src/entities"
+	"github.com/joeg-ita/giobba/src/domain"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -44,7 +44,7 @@ func NewRedisBrokerByUrl(url string) *RedisBroker {
 	return NewRedisBrokerByOptions(opt)
 }
 
-func (r *RedisBroker) AddTask(task entities.Task, queue string) (string, error) {
+func (r *RedisBroker) AddTask(task domain.Task, queue string) (string, error) {
 	if task.ID == "" {
 		task.ID = uuid.New().String()
 	}
@@ -54,11 +54,11 @@ func (r *RedisBroker) AddTask(task entities.Task, queue string) (string, error) 
 	}
 
 	if task.StartMode == "" {
-		task.StartMode = entities.MANUAL
+		task.StartMode = domain.MANUAL
 	}
 
 	if task.State == "" {
-		task.State = entities.PENDING
+		task.State = domain.PENDING
 	}
 
 	now := time.Now()
@@ -81,7 +81,7 @@ func (r *RedisBroker) AddTask(task entities.Task, queue string) (string, error) 
 	return r.SaveTask(task, queue)
 }
 
-func (r *RedisBroker) SaveTask(task entities.Task, queue string) (string, error) {
+func (r *RedisBroker) SaveTask(task domain.Task, queue string) (string, error) {
 	log.Printf("Saving task %v in queue %v", task.ID, queue)
 
 	now := time.Now()
@@ -107,14 +107,14 @@ func (r *RedisBroker) DeleteTask(taskId string, queue string) error {
 	return nil
 }
 
-func (r *RedisBroker) GetTask(taskId string, queue string) (entities.Task, error) {
+func (r *RedisBroker) GetTask(taskId string, queue string) (domain.Task, error) {
 	taskJSON, err := r.client.HGet(context.Background(), queue, taskId).Result()
 	if err == redis.Nil {
-		return entities.Task{}, fmt.Errorf("task not found: %w", err)
+		return domain.Task{}, fmt.Errorf("task not found: %w", err)
 	}
-	var task entities.Task
+	var task domain.Task
 	if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
-		return entities.Task{}, fmt.Errorf("deserialization error: %w", err)
+		return domain.Task{}, fmt.Errorf("deserialization error: %w", err)
 	}
 	return task, nil
 }
@@ -127,7 +127,7 @@ func (r *RedisBroker) UnSchedule(taskId string, queue string) error {
 	return nil
 }
 
-func (r *RedisBroker) Schedule(task entities.Task, queue string) error {
+func (r *RedisBroker) Schedule(task domain.Task, queue string) error {
 	score := float64(task.ETA.Unix())
 	if score < float64(time.Now().Unix()) {
 		score = float64(time.Now().Unix())

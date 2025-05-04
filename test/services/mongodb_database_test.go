@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joeg-ita/giobba/src/entities"
-	"github.com/joeg-ita/giobba/src/external/config"
+	"github.com/joeg-ita/giobba/src/config"
+	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,12 +40,12 @@ func TestSaveTask(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("should save new task", func(t *testing.T) {
-		task := entities.Task{
+		task := domain.Task{
 			ID:        "test-task-1",
 			Name:      "Test Task",
 			Queue:     "test-queue",
-			State:     entities.PENDING,
-			StartMode: entities.AUTO,
+			State:     domain.PENDING,
+			StartMode: domain.AUTO,
 			ETA:       time.Now().Add(time.Hour),
 			Priority:  5,
 			Payload: map[string]interface{}{
@@ -68,12 +68,12 @@ func TestSaveTask(t *testing.T) {
 	})
 
 	t.Run("should update existing task", func(t *testing.T) {
-		task := entities.Task{
+		task := domain.Task{
 			ID:        "test-task-2",
 			Name:      "Original Task",
 			Queue:     "test-queue",
-			State:     entities.PENDING,
-			StartMode: entities.AUTO,
+			State:     domain.PENDING,
+			StartMode: domain.AUTO,
 			ETA:       time.Now().Add(time.Hour),
 			Priority:  5,
 			Payload: map[string]interface{}{
@@ -89,7 +89,7 @@ func TestSaveTask(t *testing.T) {
 
 		// Update task
 		task.Name = "Updated Task"
-		task.State = entities.RUNNING
+		task.State = domain.RUNNING
 		task.UpdatedAt = time.Now()
 
 		id, err := db.SaveTask(ctx, task)
@@ -100,7 +100,7 @@ func TestSaveTask(t *testing.T) {
 		savedTask, err := db.GetTask(ctx, task.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "Updated Task", savedTask.Name)
-		assert.Equal(t, entities.RUNNING, savedTask.State)
+		assert.Equal(t, domain.RUNNING, savedTask.State)
 	})
 }
 
@@ -123,12 +123,12 @@ func TestGetTask(t *testing.T) {
 	})
 
 	t.Run("should return task when it exists", func(t *testing.T) {
-		task := entities.Task{
+		task := domain.Task{
 			ID:        "test-task-3",
 			Name:      "Test Task",
 			Queue:     "test-queue",
-			State:     entities.PENDING,
-			StartMode: entities.AUTO,
+			State:     domain.PENDING,
+			StartMode: domain.AUTO,
 			ETA:       time.Now().Add(time.Hour),
 			Priority:  5,
 			Payload: map[string]interface{}{
@@ -157,13 +157,13 @@ func TestGetTasks(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test tasks
-	tasks := []entities.Task{
+	tasks := []domain.Task{
 		{
 			ID:        "task-1",
 			Name:      "First Task",
 			Queue:     "test-queue",
-			State:     entities.PENDING,
-			StartMode: entities.AUTO,
+			State:     domain.PENDING,
+			StartMode: domain.AUTO,
 			ETA:       time.Now().Add(time.Hour),
 			Priority:  5,
 			Payload: map[string]interface{}{
@@ -176,8 +176,8 @@ func TestGetTasks(t *testing.T) {
 			ID:        "task-2",
 			Name:      "Second Task",
 			Queue:     "test-queue",
-			State:     entities.PENDING,
-			StartMode: entities.AUTO,
+			State:     domain.PENDING,
+			StartMode: domain.AUTO,
 			ETA:       time.Now().Add(time.Hour),
 			Priority:  5,
 			Payload: map[string]interface{}{
@@ -190,8 +190,8 @@ func TestGetTasks(t *testing.T) {
 			ID:        "task-3",
 			Name:      "Third Task",
 			Queue:     "test-queue",
-			State:     entities.PENDING,
-			StartMode: entities.AUTO,
+			State:     domain.PENDING,
+			StartMode: domain.AUTO,
 			ETA:       time.Now().Add(time.Hour),
 			Priority:  5,
 			Payload: map[string]interface{}{
