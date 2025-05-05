@@ -1,6 +1,6 @@
 # giobba: a go job distributed executer
 
-giobba is a job executer relying on a broker for queueing and pub/sub tasks and a database for tasks persistance,
+**giobba** is a job executer relying on a broker for queueing and pub/sub tasks and a database for tasks persistance,
 In the default implementation the broker is **redis** and the database is **mongodb**.
 
 ## Features
@@ -23,7 +23,7 @@ go get github.com/joeg-ita/giobba
 
 ## Configuration
 
-Create a configuration file named `config.yml` in one of the following locations:
+Create a configuration file named `giobba.yml` in one of the following locations:
 - `/etc/giobba.d/`
 - `~/.giobba/`
 - Current working directory
@@ -35,31 +35,62 @@ name: giobba
 version: 0.1.0
 queues: ["default", "background"]
 workersNumber: 5
-lockDuration: 10
+lockDuration: 60
 
 database:
-  url: localhost
-  port: 27017
-  username: user
-  password: pass
+  url: "mongodb://localhost:27017"
   db: giobba
   collection: tasks
 
 broker:
-  url: localhost
-  port: 6379
-  username: user
-  password: pass
+  url: "redis://localhost:6379/0"
   db: 0
 ```
 
 You can also use environment variables to override configuration values:
-- `GIOBBA_ENV`: Environment name (e.g., "dev", "prod")
+- `GIOBBA_ENV`: Environment name (e.g., "dev", "prod" to select giobba-[dev|prod].yml config file)
 - `GIOBBA_DATABASE_URL`: MongoDB connection URL
 - `GIOBBA_BROKER_URL`: Redis connection URL
-- `APP_VERSION`: Application version
 
 ## Usage
+
+### Custom handler
+
+Create a custom handler to address your business problem. Once crerated, the handler must be registered on the scheduler.
+
+Your object must implement BaseHandler struct and TaskHandlerInt interface
+
+```go
+
+type TaskHandlerInt interface {
+	Run(ctx context.Context, task domain.Task) error
+}
+
+```
+
+Example of custom handler, i.e. MyHandler
+
+```go
+
+type MyHandler struct {
+	BaseHandler
+}
+
+func (t *MyHandler) Run(ctx context.Context, task domain.Task) error {
+	log.Printf("MyHandler processing task: %s", task.Name)
+
+	// your business logic
+
+	return nil
+}
+
+```
+
+Add to Handlers map before start giobba. The key of the added handler must be the name of the Task to process 
+```go
+handler.Handlers["myHandler", &MyHandler{}]
+```
+
 
 ### Basic Example
 
@@ -85,17 +116,17 @@ func main() {
     }
     
     // Create a task with:
-    // - name: "process"
+    // - name: "myHandler"
     // - payload: custom data
     // - queue: "default"
     // - execution time: now
     // - priority: 5
     // - start mode: AUTO
     // - parent ID: "" (no parent)
-    task, _ := domain.NewTask("process", payload, "default", time.Now(), 5, domain.AUTO, "")
+    task, _ := domain.NewTask("myHandler", payload, "default", time.Now(), 5, domain.AUTO, "")
     
     // Add task to the scheduler
-    scheduler.AddTask(task)
+    scheduler.Tasks.AddTask(task)
 }
 ```
 

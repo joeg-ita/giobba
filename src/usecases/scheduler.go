@@ -40,7 +40,7 @@ type Scheduler struct {
 	brokerClient      services.BrokerInt
 	dbClient          services.DatabaseInt
 	restClient        services.RestInt
-	TaskUtils         Tasks
+	Tasks             Tasks
 	Queues            []string
 	Hostname          string
 	Handlers          map[string]services.TaskHandlerInt
@@ -79,7 +79,7 @@ func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbClient
 	return Scheduler{
 		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
 		context:           ctx,
-		TaskUtils:         *taskUtils,
+		Tasks:             *taskUtils,
 		brokerClient:      brokerClient,
 		dbClient:          dbClient,
 		restClient:        httpService,
@@ -122,12 +122,12 @@ func (s *Scheduler) startPubSub() {
 		splitted := strings.Split(msg.Payload, ":")
 		if len(splitted) == 3 {
 			if strings.ToUpper(splitted[0]) == "KILL" {
-				task, _ := s.TaskUtils.brokerClient.GetTask(splitted[2], splitted[1])
-				s.TaskUtils.KillTask(s.context, s.Workers[task.WorkerID], splitted[2], splitted[1])
+				task, _ := s.Tasks.brokerClient.GetTask(splitted[2], splitted[1])
+				s.Tasks.KillTask(s.context, s.Workers[task.WorkerID], splitted[2], splitted[1])
 			} else if strings.ToUpper(splitted[0]) == "REVOKE" {
-				s.TaskUtils.RevokeTask(splitted[2], splitted[1])
+				s.Tasks.RevokeTask(splitted[2], splitted[1])
 			} else if strings.ToUpper(splitted[0]) == "AUTO" {
-				s.TaskUtils.AutoTask(splitted[2], splitted[1])
+				s.Tasks.AutoTask(splitted[2], splitted[1])
 			}
 		}
 	}
@@ -287,7 +287,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			s.brokerClient.SaveTask(task, taskQueue)
 			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 
-			s.TaskUtils.Notify(context.Background(), task)
+			s.Tasks.Notify(context.Background(), task)
 
 			// Set the currentTaskId before executing the task
 			worker.mutex.Lock()
@@ -301,7 +301,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			worker.currentTaskId = ""
 			worker.mutex.Unlock()
 
-			s.TaskUtils.Notify(context.Background(), task)
+			s.Tasks.Notify(context.Background(), task)
 
 			if err != nil {
 				return err
@@ -345,7 +345,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 			task.State = domain.COMPLETED
 			task.CompletedAt = time.Now()
 			if task.Callback != "" {
-				go s.TaskUtils.Callback(task.Callback, task.Result)
+				go s.Tasks.Callback(task.Callback, task.Result)
 			}
 			s.SuccessExecutions++
 		} else {
@@ -357,7 +357,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 				errMsg := map[string]interface{}{
 					"error": task.Error,
 				}
-				go s.TaskUtils.Callback(task.CallbackErr, errMsg)
+				go s.Tasks.Callback(task.CallbackErr, errMsg)
 			}
 
 		}
@@ -378,7 +378,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 			errMsg := map[string]interface{}{
 				"error": task.Error,
 			}
-			go s.TaskUtils.Callback(task.CallbackErr, errMsg)
+			go s.Tasks.Callback(task.CallbackErr, errMsg)
 		}
 
 		return task, errorMsg

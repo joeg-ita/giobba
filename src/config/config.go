@@ -34,7 +34,7 @@ type Broker struct {
 
 type Config struct {
 	Name          string   `yaml:"name"`
-	Version       string   `yaml:"version" env:"APP_VERSION"`
+	Version       string   `yaml:"version"`
 	Database      Database `yaml:"database"`
 	Broker        Broker   `yaml:"broker"`
 	Queues        []string `yaml:"queues"`
