@@ -40,7 +40,7 @@ type Scheduler struct {
 	brokerClient      services.BrokerInt
 	dbClient          services.DatabaseInt
 	restClient        services.RestInt
-	TaskUtils         TaskUtils
+	TaskUtils         Tasks
 	Queues            []string
 	Hostname          string
 	Handlers          map[string]services.TaskHandlerInt
@@ -53,7 +53,7 @@ type Scheduler struct {
 	SuccessExecutions int
 }
 
-func NewScheduler(ctx context.Context, queueClient services.BrokerInt, queues []string, maxWorkers int, lockDuration int) Scheduler {
+func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbClient services.DatabaseInt, queues []string, maxWorkers int, lockDuration int) Scheduler {
 
 	hostname, _ := os.Hostname()
 	schedulerUuid := uuid.New().String()
@@ -74,13 +74,14 @@ func NewScheduler(ctx context.Context, queueClient services.BrokerInt, queues []
 
 	httpService := services.NewHttpRest()
 
-	taskUtils := NewTaskUtils(queueClient, nil, httpService, time.Duration(lockDuration)*time.Second)
+	taskUtils := NewTaskUtils(brokerClient, nil, httpService, time.Duration(lockDuration)*time.Second)
 
 	return Scheduler{
 		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
 		context:           ctx,
 		TaskUtils:         *taskUtils,
-		brokerClient:      queueClient,
+		brokerClient:      brokerClient,
+		dbClient:          dbClient,
 		restClient:        httpService,
 		Hostname:          hostname,
 		Handlers:          make(map[string]services.TaskHandlerInt),
@@ -94,10 +95,6 @@ func NewScheduler(ctx context.Context, queueClient services.BrokerInt, queues []
 	}
 }
 
-func (s *Scheduler) AddDbClient(dbClient services.DatabaseInt) {
-	s.dbClient = dbClient
-}
-
 // RegisterHandler registra un handler per un tipo di task
 func (s *Scheduler) RegisterHandler(taskName string, handler services.TaskHandlerInt) {
 	s.Mutex.Lock()
@@ -107,7 +104,7 @@ func (s *Scheduler) RegisterHandler(taskName string, handler services.TaskHandle
 
 func (s *Scheduler) Start() {
 	log.Printf("Starting Scheduler [%v] with [%d] workers on task queues [%s]", s.Id, s.MaxWorkers, s.Queues)
-	for i, _ := range s.Workers {
+	for i := range s.Workers {
 		go s.startWorker(s.Workers[i])
 	}
 	go s.startPubSub()
@@ -139,7 +136,6 @@ func (s *Scheduler) startPubSub() {
 func (s *Scheduler) heartbeat(context context.Context) {
 	for {
 		if time.Now().Unix()%HEARTBEAT_INTERVAL == 0 {
-			// fmt.Sprintf("worker %s is alive (^_^)", s.Id)
 			s.brokerClient.Publish(context, HEARTBEATS_CHANNEL, map[string]interface{}{
 				"id":           s.Id,
 				"queues":       s.Queues,
@@ -388,171 +384,6 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 		return task, errorMsg
 	}
 }
-
-// // Update KillTask to properly handle cancellation
-// func (s *Scheduler) KillTask(taskID string, queue string) error {
-// 	log.Printf("killing task %v", taskID)
-// 	task, err := s.brokerClient.GetTask(taskID, queue)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to find task %s: %v", taskID, err)
-// 	}
-
-// 	if task.State != domain.RUNNING {
-// 		log.Printf("task %v not in %v state", taskID, domain.RUNNING)
-// 		return nil
-// 	}
-
-// 	// Find the worker processing this task
-// 	var targetWorker *Worker
-// 	for _, worker := range s.Workers {
-// 		worker.mutex.Lock()
-// 		if worker.Id == task.WorkerID {
-// 			targetWorker = worker
-// 			worker.mutex.Unlock()
-// 			break
-// 		}
-// 		worker.mutex.Unlock()
-// 	}
-
-// 	if targetWorker == nil {
-// 		return fmt.Errorf("worker for task %s not found", taskID)
-// 	}
-
-// 	// Cancel the worker context and create a new one
-// 	targetWorker.mutex.Lock()
-// 	targetWorker.cancel()
-
-// 	// Create a new context for the worker
-// 	newCtx, newCancel := context.WithCancel(s.context)
-// 	targetWorker.context = newCtx
-// 	targetWorker.cancel = newCancel
-// 	targetWorker.mutex.Unlock()
-
-// 	s.taskUtils.Notify(context.Background(), task)
-
-// 	log.Printf("Task %s successfully killed", taskID)
-// 	return nil
-// }
-
-// func (s *Scheduler) RevokeTask(taskID string, queue string) error {
-
-// 	if s.brokerClient.Lock(taskID, queue, s.LockDuration) {
-// 		log.Printf("revoking task %v", taskID)
-// 		task, err := s.brokerClient.GetTask(taskID, queue)
-// 		if err != nil {
-// 			return fmt.Errorf("failed to find task %s: %v", taskID, err)
-// 		}
-
-// 		if task.State != domain.PENDING {
-// 			log.Printf("task %v not in %v state", taskID, domain.PENDING)
-// 			return nil
-// 		}
-// 		task.State = domain.REVOKED
-// 		_, err = s.brokerClient.SaveTask(task, queue)
-// 		s.brokerClient.UnLock(taskID, queue)
-
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		s.taskUtils.Notify(context.Background(), task)
-// 	}
-// 	log.Printf("task %s successfully revoked", taskID)
-// 	return nil
-// }
-
-// func (s *Scheduler) AutoTask(taskID string, queue string) error {
-
-// 	if s.brokerClient.Lock(taskID, queue, s.LockDuration) {
-// 		log.Printf("setting task %v to auto run", taskID)
-// 		task, err := s.brokerClient.GetTask(taskID, queue)
-// 		if err != nil {
-// 			return fmt.Errorf("failed to find task %s: %v", taskID, err)
-// 		}
-
-// 		if task.State != domain.PENDING {
-// 			log.Printf("task %v not in %v state", taskID, domain.PENDING)
-// 			return nil
-// 		}
-// 		task.StartMode = domain.AUTO
-// 		_, err = s.brokerClient.SaveTask(task, queue)
-// 		s.brokerClient.UnLock(taskID, queue)
-
-// 		if err != nil {
-// 			return err
-// 		}
-// 		s.taskUtils.Notify(context.Background(), task)
-// 	}
-// 	log.Printf("task %s on queue %s successfully set to auto run", taskID, queue)
-// 	return nil
-// }
-
-// func (s *Scheduler) TaskState(taskID string, queue string) (domain.TaskState, error) {
-
-// 	task, err := s.Task(taskID, queue)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to find task %s: %v", taskID, err)
-// 	}
-// 	log.Printf("task %v state %v ", task.ID, task.State)
-// 	return task.State, nil
-// }
-
-// func (s *Scheduler) Task(taskID string, queue string) (domain.Task, error) {
-
-// 	task, err := s.brokerClient.GetTask(taskID, queue)
-// 	if err != nil {
-// 		return domain.Task{}, fmt.Errorf("failed to find task %s: %v", taskID, err)
-// 	}
-// 	log.Printf("retrieved Task %v", task.ID)
-// 	return task, nil
-// }
-
-// func (s *Scheduler) AddTask(task domain.Task) (string, error) {
-
-// 	log.Printf("adding task %v", task)
-
-// 	err := task.Validate()
-// 	if err != nil {
-// 		log.Printf("task validation error %v", err)
-// 		return "", err
-// 	}
-
-// 	taskId, err := s.brokerClient.AddTask(task, task.Queue)
-// 	if err != nil {
-// 		return "", err
-// 	}
-// 	err = s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
-// 	if err != nil {
-// 		return "", err
-// 	}
-// 	s.notify(context.Background(), task)
-// 	return taskId, nil
-// }
-
-// func (s *Scheduler) callback(url string, payload map[string]interface{}) {
-// 	err := s.restClient.Post(url, payload)
-// 	if err != nil {
-// 		log.Println(err)
-// 	}
-// }
-
-// func (s *Scheduler) notify(ctx context.Context, task domain.Task) {
-
-// 	s.brokerClient.Publish(ctx, ACTIVITIES_CHANNEL, map[string]interface{}{
-// 		"workerId": task.WorkerID,
-// 		"task":     task,
-// 	})
-
-// 	if s.dbClient == nil {
-// 		return
-// 	} else {
-// 		_, err := s.dbClient.SaveTask(ctx, task)
-// 		if err != nil {
-// 			log.Printf("error sending task to database")
-// 		}
-// 	}
-
-// }
 
 // Stop gracefully stops the task scheduler
 func (s *Scheduler) Stop() {

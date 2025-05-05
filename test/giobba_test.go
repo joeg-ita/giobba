@@ -35,7 +35,8 @@ func TestMain(m *testing.M) {
 func setupTestSuite() {
 	fmt.Println("Setting up test environment...")
 	brokerClient := services.NewRedisBrokerByUrl(os.Getenv("GIOBBA_BROKER_URL"))
-	scheduler = usecases.NewScheduler(context.Background(), brokerClient, []string{"default", "background"}, 1, 1)
+	scheduler = usecases.NewScheduler(context.Background(), brokerClient, nil, []string{"default", "background"}, 1, 1)
+	go giobba.Giobba()
 	go giobba.Giobba()
 }
 

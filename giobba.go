@@ -22,17 +22,15 @@ func Giobba() {
 
 	brokerClient := services.NewRedisBrokerByUrl(cfg.Broker.Url)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	scheduler := usecases.NewScheduler(ctx, brokerClient, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
-
 	dbClient, err := services.NewMongodbDatabase(cfg.Database)
 	if err != nil {
 		log.Printf("unable to load database client")
-	} else {
-		scheduler.AddDbClient(dbClient)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	scheduler := usecases.NewScheduler(ctx, brokerClient, dbClient, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
 
 	for name, handler := range handlers.Handlers {
 		if utils.CheckInterface(handler) {

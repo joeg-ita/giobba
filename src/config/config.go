@@ -12,7 +12,7 @@ import (
 const (
 	Development        = "dev"
 	Production         = "prod"
-	ConfigBaseFileName = "config"
+	ConfigBaseFileName = "giobba"
 )
 
 type Database struct {
@@ -62,8 +62,8 @@ func LoadConfig() (*Config, error) {
 	// Add config paths
 	configPaths := []string{
 		"/etc/giobba.d/",
-		homePath + "/.",
-		pwdPath + "/.",
+		homePath + "/",
+		pwdPath + "/",
 	}
 
 	var err error

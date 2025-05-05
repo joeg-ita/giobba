@@ -10,15 +10,15 @@ import (
 	"github.com/joeg-ita/giobba/src/services"
 )
 
-type TaskUtils struct {
+type Tasks struct {
 	brokerClient services.BrokerInt
 	dbClient     services.DatabaseInt
 	restClient   services.RestInt
 	LockDuration time.Duration
 }
 
-func NewTaskUtils(brokerClient services.BrokerInt, dbClient services.DatabaseInt, restClient services.RestInt, lockDuration time.Duration) *TaskUtils {
-	return &TaskUtils{
+func NewTaskUtils(brokerClient services.BrokerInt, dbClient services.DatabaseInt, restClient services.RestInt, lockDuration time.Duration) *Tasks {
+	return &Tasks{
 		brokerClient: brokerClient,
 		dbClient:     dbClient,
 		restClient:   restClient,
@@ -27,7 +27,7 @@ func NewTaskUtils(brokerClient services.BrokerInt, dbClient services.DatabaseInt
 }
 
 // Update KillTask to properly handle cancellation
-func (t *TaskUtils) KillTask(ctx context.Context, worker *Worker, taskID string, queue string) error {
+func (t *Tasks) KillTask(ctx context.Context, worker *Worker, taskID string, queue string) error {
 	log.Printf("killing task %v", taskID)
 	task, err := t.brokerClient.GetTask(taskID, queue)
 	if err != nil {
@@ -59,7 +59,7 @@ func (t *TaskUtils) KillTask(ctx context.Context, worker *Worker, taskID string,
 	return nil
 }
 
-func (t *TaskUtils) RevokeTask(taskID string, queue string) error {
+func (t *Tasks) RevokeTask(taskID string, queue string) error {
 
 	if t.brokerClient.Lock(taskID, queue, t.LockDuration) {
 		log.Printf("revoking task %v", taskID)
@@ -86,7 +86,7 @@ func (t *TaskUtils) RevokeTask(taskID string, queue string) error {
 	return nil
 }
 
-func (t *TaskUtils) AutoTask(taskID string, queue string) error {
+func (t *Tasks) AutoTask(taskID string, queue string) error {
 
 	if t.brokerClient.Lock(taskID, queue, t.LockDuration) {
 		log.Printf("setting task %v to auto run", taskID)
@@ -112,7 +112,7 @@ func (t *TaskUtils) AutoTask(taskID string, queue string) error {
 	return nil
 }
 
-func (t *TaskUtils) TaskState(taskID string, queue string) (domain.TaskState, error) {
+func (t *Tasks) TaskState(taskID string, queue string) (domain.TaskState, error) {
 
 	task, err := t.Task(taskID, queue)
 	if err != nil {
@@ -122,7 +122,7 @@ func (t *TaskUtils) TaskState(taskID string, queue string) (domain.TaskState, er
 	return task.State, nil
 }
 
-func (t *TaskUtils) Task(taskID string, queue string) (domain.Task, error) {
+func (t *Tasks) Task(taskID string, queue string) (domain.Task, error) {
 
 	task, err := t.brokerClient.GetTask(taskID, queue)
 	if err != nil {
@@ -132,7 +132,7 @@ func (t *TaskUtils) Task(taskID string, queue string) (domain.Task, error) {
 	return task, nil
 }
 
-func (t *TaskUtils) AddTask(task domain.Task) (string, error) {
+func (t *Tasks) AddTask(task domain.Task) (string, error) {
 
 	log.Printf("adding task %v", task)
 
@@ -154,14 +154,14 @@ func (t *TaskUtils) AddTask(task domain.Task) (string, error) {
 	return taskId, nil
 }
 
-func (t *TaskUtils) Callback(url string, payload map[string]interface{}) {
+func (t *Tasks) Callback(url string, payload map[string]interface{}) {
 	err := t.restClient.Post(url, payload)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
-func (t *TaskUtils) Notify(ctx context.Context, task domain.Task) {
+func (t *Tasks) Notify(ctx context.Context, task domain.Task) {
 
 	t.brokerClient.Publish(ctx, ACTIVITIES_CHANNEL, map[string]interface{}{
 		"workerId": task.WorkerID,
