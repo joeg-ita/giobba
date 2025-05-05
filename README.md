@@ -1,4 +1,4 @@
-# giobba: a go job distributed executer
+# Giobba: a go distributed jobs executer
 
 **Giobba** is a flexible distributed task scheduling system that allows you to create and manage tasks with different priorities, scheduling options, and execution modes.
 
