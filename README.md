@@ -133,11 +133,12 @@ import (
     
     "github.com/joeg-ita/giobba"
     "github.com/joeg-ita/giobba/src/domain"
+    "github.com/joeg-ita/giobba/src/handler"
 )
 
 func main() {
     // Add custom handler
-    giobba.handler.Handlers["myHandler", &MyHandler{}]
+    handler.Handlers["myHandler", &MyHandler{}]
 
     // Start giobba
     go giobba.Giobba()
