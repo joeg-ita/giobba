@@ -1,7 +1,11 @@
 # giobba: a go job distributed executer
 
-**giobba** is a job executer relying on a broker for queueing and pub/sub tasks and a database for tasks persistance,
-In the default implementation the broker is **redis** and the database is **mongodb**.
+**Giobba** is a flexible distributed task scheduling system that allows you to create and manage tasks with different priorities, scheduling options, and execution modes.
+
+
+**Giobba** relies on a broker for queueing-pub/sub tasks and a database for tasks persistance.
+
+*In the default implementation the broker is **redis** and the database is **mongodb**.*
 
 ## Features
 
@@ -14,6 +18,30 @@ In the default implementation the broker is **redis** and the database is **mong
 - Configurable number of workers and queues
 - Task locking mechanism to prevent duplicate execution
 - Graceful shutdown support
+
+## Best Practices
+
+1. Always check for context cancellation in long-running tasks
+2. Use appropriate task priorities based on importance
+3. Implement proper error handling and logging
+4. Use callbacks for task completion notifications
+5. Consider using child tasks and manual triggering for complex workflows
+6. Set appropriate ETA values and priorities for scheduled tasks
+
+## Task Properties
+
+Tasks have several configurable properties:
+
+- `Name`: Unique identifier for the task type
+- `Payload`: Map of data to be processed by the handler
+- `Queue`: Queue where the task will be processed
+- `State`: Current state of the task (PENDING, RUNNING, COMPLETED, FAILED, REVOKED, KILLED)
+- `ETA`: Expected time of arrival/execution
+- `Priority`: Task priority (0-10, higher is more important)
+- `StartMode`: AUTO or MANUAL
+- `ParentID`: ID of the parent task (for task chains)
+- `Callback`: URL to call when task completes successfully
+- `CallbackErr`: URL to call when task fails
 
 ## Installation
 
@@ -54,21 +82,13 @@ You can also use environment variables to override configuration values:
 
 ## Usage
 
-### Custom handler
+### Creating Custom Task Handlers
 
-Create a custom handler to address your business problem. Once crerated, the handler must be registered on the scheduler.
+To create a custom task handler, you can embed the `BaseHandler` struct and implement the `Run` method. 
 
-Your object must implement BaseHandler struct and TaskHandlerInt interface
+The custom handler will address your business problem. Once created, the handler must be registered on the scheduler.
 
-```go
-
-type TaskHandlerInt interface {
-	Run(ctx context.Context, task domain.Task) error
-}
-
-```
-
-Example of custom handler, i.e. MyHandler
+Here's an example of custom handler, i.e. `MyHandler`
 
 ```go
 
@@ -79,18 +99,29 @@ type MyHandler struct {
 func (t *MyHandler) Run(ctx context.Context, task domain.Task) error {
 	log.Printf("MyHandler processing task: %s", task.Name)
 
-	// your business logic
-
-	return nil
+	// Access task payload
+    payload := task.Payload
+    
+    // Your custom logic here
+    // ...
+    
+    // Check for cancellation
+    select {
+        case <-ctx.Done():
+        return fmt.Errorf("task cancelled")
+    default:
+        // Continue with work
+    }
+    
+    return nil
 }
 
 ```
 
-Add to Handlers map before start giobba. The key of the added handler must be the name of the Task to process 
+Add `MyHandler` to Handlers map before start giobba. The `key` of the added handler must be the value of the name field of the Task to process 
 ```go
 handler.Handlers["myHandler", &MyHandler{}]
 ```
-
 
 ### Basic Example
 
@@ -106,6 +137,9 @@ import (
 )
 
 func main() {
+    // Add custom handler
+    giobba.handler.Handlers["myHandler", &MyHandler{}]
+
     // Start giobba
     go giobba.Giobba()
     
@@ -130,15 +164,17 @@ func main() {
 }
 ```
 
-### Task Dependencies Example
+## Other usecases
+
+### Parent Child Tasks
 
 ```go
 // Create a parent task
-parentTask, _ := domain.NewTask("process", payload, "default", time.Now(), 5, domain.AUTO, "")
+parentTask, _ := domain.NewTask("myHandler", payload, "default", time.Now(), 5, domain.AUTO, "")
 parentId, _ := scheduler.AddTask(parentTask)
 
 // Create a child task that depends on the parent
-childTask, _ := domain.NewTask("process", childPayload, "default", time.Now(), 5, domain.AUTO, parentId)
+childTask, _ := domain.NewTask("myHandler", childPayload, "default", time.Now(), 5, domain.AUTO, parentId)
 scheduler.AddTask(childTask)
 ```
 
@@ -146,61 +182,14 @@ scheduler.AddTask(childTask)
 
 ```go
 // Create a task with manual start mode
-task, _ := domain.NewTask("process", payload, "default", time.Now(), 5, domain.MANUAL, "")
+task, _ := domain.NewTask("myHandler", payload, "default", time.Now(), 5, domain.MANUAL, "")
 taskId, _ := scheduler.AddTask(task)
 
 // Manually start the task when ready
 scheduler.AutoTask(taskId, "default")
 ```
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-# Giobba Task Scheduler
-
-Giobba is a flexible task scheduling system that allows you to create and manage tasks with different priorities, scheduling options, and execution modes.
-
-## Creating Custom Task Handlers
-
-To create a custom task handler, you can embed the `BaseHandler` struct and implement the `Run` method. Here's an example:
-
-```go
-package myhandlers
-
-import (
-    "context"
-    "github.com/joeg-ita/giobba/src/domain"
-    "github.com/joeg-ita/giobba/src/handlers"
-)
-
-// MyCustomHandler implements a custom task handler
-type MyCustomHandler struct {
-    handlers.BaseHandler
-    // Add any custom fields here
-}
-
-// Run implements the task execution logic
-func (h *MyCustomHandler) Run(ctx context.Context, task domain.Task) error {
-    // Access task payload
-    payload := task.Payload
-    
-    // Your custom logic here
-    // ...
-    
-    // Check for cancellation
-    select {
-    case <-ctx.Done():
-        return fmt.Errorf("task cancelled")
-    default:
-        // Continue with work
-    }
-    
-    return nil
-}
-```
-
-## Creating Tasks
+### Tasks creation helpers
 
 The package provides several helper functions to create tasks with different configurations:
 
@@ -261,63 +250,7 @@ task, err := handlers.NewScheduledTask(
 )
 ```
 
-## Task Properties
 
-Tasks have several configurable properties:
-
-- `Name`: Unique identifier for the task type
-- `Payload`: Map of data to be processed by the handler
-- `Queue`: Queue where the task will be processed
-- `State`: Current state of the task (PENDING, RUNNING, COMPLETED, FAILED, REVOKED, KILLED)
-- `ETA`: Expected time of arrival/execution
-- `Priority`: Task priority (0-10, higher is more important)
-- `StartMode`: AUTO or MANUAL
-- `ParentID`: ID of the parent task (for task chains)
-- `Callback`: URL to call when task completes successfully
-- `CallbackErr`: URL to call when task fails
-
-## Best Practices
-
-1. Always check for context cancellation in long-running tasks
-2. Use appropriate task priorities based on importance
-3. Implement proper error handling and logging
-4. Use callbacks for task completion notifications
-5. Consider using child tasks for complex workflows
-6. Set appropriate ETA values for scheduled tasks
-
-## Example Workflow
-
-```go
-// Create a parent task
-parentTask, err := handlers.NewDefaultTask(
-    "parent-task",
-    map[string]interface{}{
-        "data": "parent-data",
-    },
-    "my-queue",
-)
-
-// Create child tasks
-childTask1, err := handlers.NewChildTask(
-    "child-task-1",
-    map[string]interface{}{
-        "data": "child-1-data",
-    },
-    "my-queue",
-    parentTask.ID,
-)
-
-childTask2, err := handlers.NewChildTask(
-    "child-task-2",
-    map[string]interface{}{
-        "data": "child-2-data",
-    },
-    "my-queue",
-    parentTask.ID,
-)
-```
-
-This creates a workflow where child tasks will only execute after the parent task completes successfully.
-
-
-
+## License
+        
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
