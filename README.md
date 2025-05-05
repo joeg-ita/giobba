@@ -72,11 +72,10 @@ database:
 
 broker:
   url: "redis://localhost:6379/0"
-  db: 0
 ```
 
 You can also use environment variables to override configuration values:
-- `GIOBBA_ENV`: Environment name (e.g., "dev", "prod" to select giobba-[dev|prod].yml config file)
+- `GIOBBA_ENV`: Environment name (e.g., "dev", "prod" to select giobba-[dev|prod].yml environment specific config file)
 - `GIOBBA_DATABASE_URL`: MongoDB connection URL
 - `GIOBBA_BROKER_URL`: Redis connection URL
 
