@@ -95,15 +95,15 @@ type MyHandler struct {
 	BaseHandler
 }
 
-func (t *MyHandler) Run(ctx context.Context, task domain.Task) error {
-	log.Printf("MyHandler processing task: %s", task.Name)
+func (m *MyHandler) Run(ctx context.Context, task domain.Task) error {
+    log.Printf("MyHandler processing task: %s", task.Name)
 
-	// Access task payload
+    // Access task payload
     payload := task.Payload
-    
+
     // Your custom logic here
     // ...
-    
+
     // Check for cancellation
     select {
         case <-ctx.Done():
@@ -111,7 +111,7 @@ func (t *MyHandler) Run(ctx context.Context, task domain.Task) error {
     default:
         // Continue with work
     }
-    
+
     return nil
 }
 
