@@ -16,12 +16,13 @@ const (
 )
 
 type Database struct {
-	Url        string `yaml:"url" env:"GIOBBA_DATABASE_URL"`
-	Port       string `yaml:"port" env:"GIOBBA_DATABASE_PORT"`
-	Username   string `yaml:"username" env:"GIOBBA_DATABASE_ADMIN_USERNAME"`
-	Password   string `yaml:"password" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
-	DB         string `yaml:"db" env:"GIOBBA_DATABASE"`
-	Collection string `yaml:"collection" env:"GIOBBA_DATABASE_COLLECTION"`
+	Url             string `yaml:"url" env:"GIOBBA_DATABASE_URL"`
+	Port            string `yaml:"port" env:"GIOBBA_DATABASE_PORT"`
+	Username        string `yaml:"username" env:"GIOBBA_DATABASE_ADMIN_USERNAME"`
+	Password        string `yaml:"password" env:"GIOBBA_DATABASE_ADMIN_PASSWORD"`
+	DB              string `yaml:"db" env:"GIOBBA_DATABASE"`
+	TasksCollection string `yaml:"tasksCollection"`
+	JobsCollection  string `yaml:"jobsCollection"`
 }
 
 type Broker struct {
@@ -33,13 +34,14 @@ type Broker struct {
 }
 
 type Config struct {
-	Name          string   `yaml:"name"`
-	Version       string   `yaml:"version"`
-	Database      Database `yaml:"database"`
-	Broker        Broker   `yaml:"broker"`
-	Queues        []string `yaml:"queues"`
-	WorkersNumber int      `yaml:"workersNumber"`
-	LockDuration  int      `yaml:"lockDuration"`
+	Name               string   `yaml:"name"`
+	Version            string   `yaml:"version"`
+	Database           Database `yaml:"database"`
+	Broker             Broker   `yaml:"broker"`
+	Queues             []string `yaml:"queues"`
+	WorkersNumber      int      `yaml:"workersNumber"`
+	LockDuration       int      `yaml:"lockDuration"`
+	JobsTimeoutRefresh int      `yaml:"jobsTimeoutRefresh"`
 }
 
 func LoadConfig() (*Config, error) {

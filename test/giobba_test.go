@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/joeg-ita/giobba"
+	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/joeg-ita/giobba/src/usecases"
@@ -34,9 +35,17 @@ func TestMain(m *testing.M) {
 // setupTestSuite performs one-time setup for the entire test suite
 func setupTestSuite() {
 	fmt.Println("Setting up test environment...")
+	cfg := config.Database{
+		Url:             "mongodb://localhost:27017",
+		DB:              "test_db",
+		TasksCollection: "test_tasks",
+		JobsCollection:  "test_jobs",
+	}
 	brokerClient := services.NewRedisBrokerByUrl(os.Getenv("GIOBBA_BROKER_URL"))
-	scheduler = usecases.NewScheduler(context.Background(), brokerClient, nil, []string{"default", "background"}, 1, 1)
-	go giobba.Giobba()
+	mongodbClient, _ := services.NewMongodbClient(cfg)
+	mongodbTasks, _ := services.NewMongodbTasks(mongodbClient, cfg)
+	mongodbJobs, _ := services.NewMongodbJobs(mongodbClient, cfg)
+	scheduler = usecases.NewScheduler(context.Background(), brokerClient, mongodbTasks, mongodbJobs, []string{"default", "background"}, 1, 1)
 	go giobba.Giobba()
 }
 
@@ -179,5 +188,42 @@ func TestTasksWithDifferenteDatetime(t *testing.T) {
 	if result[taskid_after_20_sec].StartedAt.Before(result[taskid_after_5_sec].StartedAt) {
 		t.Error("task_09 finished after task_05")
 	}
+
+}
+
+func TestJob(t *testing.T) {
+
+	fmt.Println("TestJob...")
+
+	now := time.Now()
+	queue := "background"
+
+	payload := map[string]interface{}{
+		"user": "sub_a",
+		"job":  "process_subA",
+	}
+	scheduledTask, _ := domain.NewScheduledTask("process", payload, queue, now, "0 0 * * *", true, 9)
+	scheduledTaskId, _ := scheduler.Tasks.AddTask(scheduledTask)
+	fmt.Println(scheduledTaskId)
+
+	// tasks := []string{scheduledTaskId, scheduledTaskId}
+	// result := make(map[string]domain.Task)
+
+	// for {
+	// 	for _, tid := range tasks {
+	// 		task, _ := scheduler.Tasks.Task(tid, queue)
+	// 		if task.State == "COMPLETED" {
+	// 			result[tid] = task
+	// 		}
+	// 		time.Sleep(2 * time.Second)
+	// 	}
+	// 	if len(result) == 2 {
+	// 		break
+	// 	}
+	// }
+
+	// if result[taskid_after_20_sec].StartedAt.Before(result[taskid_after_5_sec].StartedAt) {
+	// 	t.Error("task_09 finished after task_05")
+	// }
 
 }

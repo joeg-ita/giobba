@@ -12,22 +12,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB() (*services.MongodbDatabase, func()) {
+func setupTestDB() (*services.MongodbTasks, func()) {
 	// Use a test database configuration
 	cfg := config.Database{
-		Url:        "mongodb://localhost:27017",
-		DB:         "test_db",
-		Collection: "test_tasks",
+		Url:             "mongodb://localhost:27017",
+		DB:              "test_db",
+		TasksCollection: "test_tasks",
 	}
 
-	db, _ := services.NewMongodbDatabase(cfg)
+	mongodbClient, _ := services.NewMongodbClient(cfg)
+	db, _ := services.NewMongodbTasks(mongodbClient, cfg)
 	ctx := context.Background()
 
 	// Cleanup function to drop the test collection and close the connection
 	cleanup := func() {
-		collection := db.Client.Database(cfg.DB).Collection(cfg.Collection)
+		collection := mongodbClient.GetClient().Database(cfg.DB).Collection(cfg.JobsCollection)
 		collection.Drop(ctx)
-		db.Close(ctx)
+		mongodbClient.Close(ctx)
 	}
 
 	return db, cleanup

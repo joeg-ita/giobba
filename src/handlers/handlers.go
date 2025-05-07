@@ -79,14 +79,14 @@ func NewHighPriorityTask(name string, payload map[string]interface{}, queue stri
 
 // Helper function to create a scheduled task
 func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time) (domain.Task, error) {
-	return domain.NewTask(
+	return domain.NewScheduledTask(
 		name,
 		payload,
 		queue,
 		eta,
-		5, // default priority
-		domain.AUTO,
-		"",
+		"5 * * * *",
+		true,
+		5,
 	)
 }
 

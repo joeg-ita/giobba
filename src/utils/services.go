@@ -1,8 +1,6 @@
 package utils
 
-import "github.com/joeg-ita/giobba/src/services"
-
-func CheckInterface(value interface{}) bool {
-	_, ok := value.(services.TaskHandlerInt)
+func CheckInterface[T any](s interface{}) bool {
+	_, ok := s.(T)
 	return ok
 }

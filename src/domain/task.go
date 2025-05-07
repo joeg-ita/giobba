@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/joeg-ita/giobba/src/utils"
 )
 
 type TaskState string
@@ -27,30 +28,33 @@ const (
 )
 
 type Task struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Payload     map[string]interface{} `json:"payload"`
-	Queue       string                 `json:"queue"`
-	State       TaskState              `json:"state"`
-	ETA         time.Time              `json:"eta"`
-	Priority    int                    `json:"priority"`
-	ParentID    string                 `json:"parent_id"`
-	StartMode   StartMode              `json:"startMode"`
-	Error       string                 `json:"error,omitempty"`
-	CreatedAt   time.Time              `json:"created_at,omitempty"`
-	UpdatedAt   time.Time              `json:"updated_at,omitempty"`
-	StartedAt   time.Time              `json:"started_at,omitempty"`
-	CompletedAt time.Time              `json:"completed_at,omitempty"`
-	ExpireAt    time.Time              `json:"expire_at,omitempty"`
-	Result      map[string]interface{} `json:"result,omitempty"`
-	Retries     int                    `json:"retries,omitempty"`
-	MaxRetries  int                    `json:"max_retries,omitempty"`
-	Tags        []string               `json:"tags,omitempty"`
-	SchedulerID string                 `json:"scheduler_id,omitempty"`
-	WorkerID    string                 `json:"worker_id,omitempty"`
-	ChildrenID  []string               `json:"children_id,omitempty"`
-	Callback    string                 `json:"callback,omitempty"`
-	CallbackErr string                 `json:"callback_err,omitempty"`
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	Payload          map[string]interface{} `json:"payload"`
+	Queue            string                 `json:"queue"`
+	State            TaskState              `json:"state"`
+	ETA              time.Time              `json:"eta"`
+	Priority         int                    `json:"priority"`
+	ParentID         string                 `json:"parent_id"`
+	StartMode        StartMode              `json:"startMode"`
+	Schedule         string                 `json:"schedule,omitempty"`
+	IsScheduleActive bool                   `json:"is_schedule_active,omitempty"`
+	JobID            string                 `json:"job_id,omitempty"`
+	Error            string                 `json:"error,omitempty"`
+	CreatedAt        time.Time              `json:"created_at,omitempty"`
+	UpdatedAt        time.Time              `json:"updated_at,omitempty"`
+	StartedAt        time.Time              `json:"started_at,omitempty"`
+	CompletedAt      time.Time              `json:"completed_at,omitempty"`
+	ExpireAt         time.Time              `json:"expire_at,omitempty"`
+	Result           map[string]interface{} `json:"result,omitempty"`
+	Retries          int                    `json:"retries,omitempty"`
+	MaxRetries       int                    `json:"max_retries,omitempty"`
+	Tags             []string               `json:"tags,omitempty"`
+	SchedulerID      string                 `json:"scheduler_id,omitempty"`
+	WorkerID         string                 `json:"worker_id,omitempty"`
+	ChildrenID       []string               `json:"children_id,omitempty"`
+	Callback         string                 `json:"callback,omitempty"`
+	CallbackErr      string                 `json:"callback_err,omitempty"`
 }
 
 func NewTask(name string, payload map[string]interface{}, queue string, eta time.Time, priority int, mode StartMode, parentId string) (Task, error) {
@@ -69,6 +73,31 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 		StartMode: mode,
 		State:     PENDING,
 		ParentID:  parentId,
+	}
+
+	err := task.Validate()
+	if err != nil {
+		return Task{}, err
+	}
+
+	return task, nil
+}
+
+func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time, schedule string, isScheduleActive bool, priority int) (Task, error) {
+	id := uuid.New().String()
+
+	task := Task{
+		ID:               id,
+		Name:             name,
+		Payload:          payload,
+		Queue:            queue,
+		ETA:              eta,
+		Schedule:         schedule,
+		IsScheduleActive: isScheduleActive,
+		Priority:         priority,
+		StartMode:        AUTO,
+		State:            PENDING,
+		ParentID:         id,
 	}
 
 	err := task.Validate()
@@ -129,11 +158,15 @@ func (t *Task) Validate() error {
 	}
 
 	if t.Priority < 0 || t.Priority > 10 {
-		return fmt.Errorf("piority must be a value in range [0,10]. higher value higher priority")
+		return fmt.Errorf("priority must be a value in range [0,10]. higher value higher priority")
 	}
 
 	if t.ETA.IsZero() {
 		return fmt.Errorf("eta datetime required")
+	}
+
+	if t.Schedule != "" {
+		return utils.ParseCronSchedule(t.Schedule)
 	}
 
 	// Validate Callback URL if present

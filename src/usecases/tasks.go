@@ -8,22 +8,67 @@ import (
 
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
+	"github.com/joeg-ita/giobba/src/utils"
 )
 
 type Tasks struct {
-	brokerClient services.BrokerInt
-	dbClient     services.DatabaseInt
-	restClient   services.RestInt
-	LockDuration time.Duration
+	brokerClient  services.BrokerInt
+	dbTasksClient services.DbTasksInt
+	dbJobsClient  services.DbJobsInt
+	restClient    services.RestInt
+	LockDuration  time.Duration
 }
 
-func NewTaskUtils(brokerClient services.BrokerInt, dbClient services.DatabaseInt, restClient services.RestInt, lockDuration time.Duration) *Tasks {
+func NewTaskUtils(brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, restClient services.RestInt, lockDuration time.Duration) *Tasks {
 	return &Tasks{
-		brokerClient: brokerClient,
-		dbClient:     dbClient,
-		restClient:   restClient,
-		LockDuration: lockDuration,
+		brokerClient:  brokerClient,
+		dbTasksClient: dbTasksClient,
+		dbJobsClient:  dbJobsClient,
+		restClient:    restClient,
+		LockDuration:  lockDuration,
 	}
+}
+
+func (t *Tasks) AddTask(task domain.Task) (string, error) {
+
+	log.Printf("adding task %v", task)
+
+	err := task.Validate()
+	if err != nil {
+		log.Printf("task validation error %v", err)
+		return "", err
+	}
+
+	err = utils.ParseCronSchedule(task.Schedule)
+	if err != nil {
+		log.Printf("task schedule unset %v", err)
+	} else {
+		job, err := domain.NewJob(task.Schedule, task.ID, task.ETA, true)
+		if err != nil {
+			return "", err
+		}
+		err = t.AddJob(job)
+		if err != nil {
+			return "", err
+		}
+		task.JobID = job.ID
+	}
+
+	taskId, err := t.brokerClient.AddTask(task, task.Queue)
+	if err != nil {
+		return "", err
+	}
+	err = t.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+	if err != nil {
+		return "", err
+	}
+	t.Notify(context.Background(), task)
+	return taskId, nil
+}
+
+func (t *Tasks) AddJob(job domain.Job) error {
+	_, err := t.dbJobsClient.Save(context.Background(), job)
+	return err
 }
 
 // Update KillTask to properly handle cancellation
@@ -132,28 +177,6 @@ func (t *Tasks) Task(taskID string, queue string) (domain.Task, error) {
 	return task, nil
 }
 
-func (t *Tasks) AddTask(task domain.Task) (string, error) {
-
-	log.Printf("adding task %v", task)
-
-	err := task.Validate()
-	if err != nil {
-		log.Printf("task validation error %v", err)
-		return "", err
-	}
-
-	taskId, err := t.brokerClient.AddTask(task, task.Queue)
-	if err != nil {
-		return "", err
-	}
-	err = t.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
-	if err != nil {
-		return "", err
-	}
-	t.Notify(context.Background(), task)
-	return taskId, nil
-}
-
 func (t *Tasks) Callback(url string, payload map[string]interface{}) {
 	err := t.restClient.Post(url, payload)
 	if err != nil {
@@ -168,10 +191,10 @@ func (t *Tasks) Notify(ctx context.Context, task domain.Task) {
 		"task":     task,
 	})
 
-	if t.dbClient == nil {
+	if t.dbTasksClient == nil {
 		return
 	} else {
-		_, err := t.dbClient.SaveTask(ctx, task)
+		_, err := t.dbTasksClient.SaveTask(ctx, task)
 		if err != nil {
 			log.Printf("error sending task to database")
 		}

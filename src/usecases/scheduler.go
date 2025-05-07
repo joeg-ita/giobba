@@ -38,7 +38,7 @@ type Scheduler struct {
 	Id                string
 	context           context.Context
 	brokerClient      services.BrokerInt
-	dbClient          services.DatabaseInt
+	dbClient          services.DbTasksInt
 	restClient        services.RestInt
 	Tasks             Tasks
 	Queues            []string
@@ -53,7 +53,7 @@ type Scheduler struct {
 	SuccessExecutions int
 }
 
-func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbClient services.DatabaseInt, queues []string, maxWorkers int, lockDuration int) Scheduler {
+func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, queues []string, maxWorkers int, lockDuration int) Scheduler {
 
 	hostname, _ := os.Hostname()
 	schedulerUuid := uuid.New().String()
@@ -74,14 +74,14 @@ func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbClient
 
 	httpService := services.NewHttpRest()
 
-	taskUtils := NewTaskUtils(brokerClient, nil, httpService, time.Duration(lockDuration)*time.Second)
+	taskUtils := NewTaskUtils(brokerClient, dbTasksClient, dbJobsClient, httpService, time.Duration(lockDuration)*time.Second)
 
 	return Scheduler{
 		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
 		context:           ctx,
 		Tasks:             *taskUtils,
 		brokerClient:      brokerClient,
-		dbClient:          dbClient,
+		dbClient:          dbTasksClient,
 		restClient:        httpService,
 		Hostname:          hostname,
 		Handlers:          make(map[string]services.TaskHandlerInt),

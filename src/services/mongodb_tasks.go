@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/domain"
@@ -12,28 +11,23 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-type MongodbDatabase struct {
-	Client     *mongo.Client
-	database   string
-	collection string
+type MongodbTasks struct {
+	client     DbClient[*mongo.Client]
+	cfg        config.Database
+	collection *mongo.Collection
 }
 
-func NewMongodbDatabase(cfg config.Database) (*MongodbDatabase, error) {
-	Client, err := mongo.Connect(options.Client().ApplyURI(cfg.Url))
-	if err != nil {
-		log.Println("error starting mongodb client", err)
-		return nil, err
-	}
+func NewMongodbTasks(dbClient DbClient[*mongo.Client], cfg config.Database) (*MongodbTasks, error) {
+	collection := dbClient.GetClient().Database(cfg.DB).Collection(cfg.TasksCollection)
 
-	return &MongodbDatabase{
-		Client:     Client,
-		database:   cfg.DB,
-		collection: cfg.Collection,
+	return &MongodbTasks{
+		client:     dbClient,
+		cfg:        cfg,
+		collection: collection,
 	}, nil
 }
 
-func (m *MongodbDatabase) SaveTask(ctx context.Context, task domain.Task) (string, error) {
-	collection := m.Client.Database(m.database).Collection(m.collection)
+func (m *MongodbTasks) SaveTask(ctx context.Context, task domain.Task) (string, error) {
 
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: task.ID}}
@@ -42,7 +36,7 @@ func (m *MongodbDatabase) SaveTask(ctx context.Context, task domain.Task) (strin
 	update := bson.D{{Key: "$set", Value: task}}
 
 	// Perform update operation
-	result, err := collection.UpdateOne(ctx, filter, update)
+	result, err := m.collection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +62,7 @@ func (m *MongodbDatabase) SaveTask(ctx context.Context, task domain.Task) (strin
 				doc = append(doc, bson.E{Key: k, Value: v})
 			}
 		}
-		_, err = collection.InsertOne(ctx, doc)
+		_, err = m.collection.InsertOne(ctx, doc)
 		if err != nil {
 			return "", err
 		}
@@ -77,19 +71,17 @@ func (m *MongodbDatabase) SaveTask(ctx context.Context, task domain.Task) (strin
 	return task.ID, nil
 }
 
-func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (domain.Task, error) {
+func (m *MongodbTasks) GetTask(ctx context.Context, taskId string) (domain.Task, error) {
 	if taskId == "" {
 		return domain.Task{}, fmt.Errorf("task ID cannot be empty")
 	}
-
-	collection := m.Client.Database(m.database).Collection(m.collection)
 
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: taskId}}
 
 	// Retrieves the first matching document
 	var task domain.Task
-	err := collection.FindOne(ctx, filter).Decode(&task)
+	err := m.collection.FindOne(ctx, filter).Decode(&task)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -100,8 +92,7 @@ func (m *MongodbDatabase) GetTask(ctx context.Context, taskId string) (domain.Ta
 	return task, nil
 }
 
-func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Task, error) {
-	collection := m.Client.Database(m.database).Collection(m.collection)
+func (m *MongodbTasks) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Task, error) {
 
 	// Create filter based on query string
 	var filter bson.M
@@ -126,7 +117,7 @@ func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, 
 	}
 
 	// Execute find operation
-	cursor, err := collection.Find(ctx, filter, findOptions)
+	cursor, err := m.collection.Find(ctx, filter, findOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find tasks: %w", err)
 	}
@@ -141,11 +132,8 @@ func (m *MongodbDatabase) GetTasks(ctx context.Context, query string, skip int, 
 	return tasks, nil
 }
 
-func (m *MongodbDatabase) Close(ctx context.Context) {
-	if m.Client != nil {
-		if err := m.Client.Disconnect(ctx); err != nil {
-			// Log error but don't return it since this is a cleanup operation
-			fmt.Printf("Error disconnecting MongoDB Client: %v\n", err)
-		}
+func (m *MongodbTasks) Close(ctx context.Context) {
+	if m.client != nil {
+		m.client.Close(ctx)
 	}
 }

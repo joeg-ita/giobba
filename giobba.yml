@@ -3,6 +3,7 @@ version: 0.1.0
 queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 10
+jobsTimeoutRefresh: 60
 
 database:
   url: 0.0.0.0
@@ -10,7 +11,8 @@ database:
   username: user
   password: pass
   db: giobba
-  collection: tasks
+  tasksCollection: tasks
+  jobsCollection: jobs
 
 broker:
   url: 0.0.0.0

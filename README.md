@@ -5,7 +5,7 @@
 
 **Giobba** relies on a broker for queueing-pub/sub tasks and a database for tasks persistance.
 
-*In the default implementation the broker is **redis** and the database is **mongodb**.*
+*In default implementation the broker is **redis** and the database is **mongodb***
 
 ## Features
 
