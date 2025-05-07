@@ -10,7 +10,6 @@ import (
 
 	"github.com/joeg-ita/giobba/src/domain"
 
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -45,38 +44,9 @@ func NewRedisBrokerByUrl(url string) *RedisBroker {
 }
 
 func (r *RedisBroker) AddTask(task domain.Task, queue string) (string, error) {
-	if task.ID == "" {
-		task.ID = uuid.New().String()
-	}
-
-	if task.ParentID == "" {
-		task.ParentID = task.ID
-	}
-
-	if task.StartMode == "" {
-		task.StartMode = domain.MANUAL
-	}
-
-	if task.State == "" {
-		task.State = domain.PENDING
-	}
 
 	now := time.Now()
-	if task.CreatedAt.IsZero() {
-		task.CreatedAt = now
-	}
 	task.UpdatedAt = now
-
-	// Priorità deve essere tra 0 e 10
-	if task.Priority < 0 {
-		task.Priority = 0
-	} else if task.Priority > 10 {
-		task.Priority = 10
-	}
-
-	if task.ETA.Before(now) {
-		task.ETA = now
-	}
 
 	return r.SaveTask(task, queue)
 }

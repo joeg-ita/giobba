@@ -111,7 +111,7 @@ func (t *Process) Run(ctx context.Context, task domain.Task) error {
 		if i%4 == 0 {
 			log.Printf("processing %v", i)
 		}
-		time.Sleep(time.Duration(1000) * time.Millisecond)
+		time.Sleep(time.Duration(500) * time.Millisecond)
 	}
 	return nil
 }

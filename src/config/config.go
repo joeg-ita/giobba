@@ -77,13 +77,11 @@ func LoadConfig() (*Config, error) {
 
 			_, err = os.Stat(path)
 			if err == nil {
-				config = ConfigFromYaml(path)
-				if config != nil {
-					OverrideEnvs(config)
-					err = nil
-					break
-				} else {
+				config, err = ConfigFromYaml(path)
+				if err != nil {
 					err = errors.New("something went wrong")
+				} else {
+					break
 				}
 				break
 			}
@@ -94,13 +92,14 @@ func LoadConfig() (*Config, error) {
 	return config, err
 }
 
-func ConfigFromYaml(filePath string) *Config {
+func ConfigFromYaml(filePath string) (*Config, error) {
 
 	// Open the YAML file
 	log.Printf("ConfigFromYaml - Loading file: %v", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil
+		log.Printf("error loading file %v: %v", filePath, err.Error())
+		return nil, err
 	}
 	defer file.Close()
 
@@ -114,9 +113,13 @@ func ConfigFromYaml(filePath string) *Config {
 	}
 
 	// Print the loaded data
-	log.Printf("ConfigFromYaml - Config Loaded!")
+	err = OverrideEnvs(config)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ConfigFromYaml - Config Loaded!", config)
 
-	return config
+	return config, nil
 }
 
 func OverrideEnvs(obj interface{}) error {
@@ -139,7 +142,7 @@ func setFieldFromEnv(v reflect.Value) error {
 	}
 
 	// Iterate through all fields
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		field := t.Field(i)
 		fieldValue := v.Field(i)
 

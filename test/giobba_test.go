@@ -12,9 +12,12 @@ import (
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/joeg-ita/giobba/src/usecases"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 var scheduler usecases.Scheduler
+var mongodbClient services.DbClient[*mongo.Client]
+var cfg *config.Config
 
 func TestMain(m *testing.M) {
 	// Global setup before any tests run
@@ -35,23 +38,21 @@ func TestMain(m *testing.M) {
 // setupTestSuite performs one-time setup for the entire test suite
 func setupTestSuite() {
 	fmt.Println("Setting up test environment...")
-	cfg := config.Database{
-		Url:             "mongodb://localhost:27017",
-		DB:              "test_db",
-		TasksCollection: "test_tasks",
-		JobsCollection:  "test_jobs",
-	}
-	brokerClient := services.NewRedisBrokerByUrl(os.Getenv("GIOBBA_BROKER_URL"))
-	mongodbClient, _ := services.NewMongodbClient(cfg)
-	mongodbTasks, _ := services.NewMongodbTasks(mongodbClient, cfg)
-	mongodbJobs, _ := services.NewMongodbJobs(mongodbClient, cfg)
+	cfg, _ = config.ConfigFromYaml("giobba.yml")
+	brokerClient := services.NewRedisBrokerByUrl(cfg.Broker.Url)
+	mongodbClient, _ = services.NewMongodbClient(cfg.Database)
+	mongodbTasks, _ := services.NewMongodbTasks(mongodbClient, cfg.Database)
+	mongodbJobs, _ := services.NewMongodbJobs(mongodbClient, cfg.Database)
 	scheduler = usecases.NewScheduler(context.Background(), brokerClient, mongodbTasks, mongodbJobs, []string{"default", "background"}, 1, 1)
+	go giobba.Giobba()
 	go giobba.Giobba()
 }
 
 // teardownTestSuite performs one-time cleanup after all tests have run
 func teardownTestSuite() {
 	fmt.Println("Cleaning up test environment...")
+	mongodbClient.GetClient().Database(cfg.Database.DB).Drop(context.TODO())
+	mongodbClient.Close(context.TODO())
 }
 
 func TestMainTaskAndSubTasksAutoAndManual(t *testing.T) {
@@ -141,10 +142,14 @@ func TestTasksWithSameDatetimeDifferentPriorities(t *testing.T) {
 	}
 
 	if result[taskid_p9].StartedAt.After(result[taskid_p5].StartedAt) {
-		t.Error("task_09 finished after task_05")
+		t.Log("taskid_p9 startedAt", result[taskid_p9].StartedAt)
+		t.Log("taskid_p5 startedAt", result[taskid_p5].StartedAt)
+		t.Error("task_09 started after task_05")
 	}
 	if result[taskid_p5].StartedAt.After(result[taskid_p2].StartedAt) {
-		t.Error("task_05 finished after task_02")
+		t.Log("taskid_p5 startedAt", result[taskid_p5].StartedAt)
+		t.Log("taskid_p2 startedAt", result[taskid_p2].StartedAt)
+		t.Error("task_05 started after task_02")
 	}
 
 }
