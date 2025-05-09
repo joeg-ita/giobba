@@ -30,7 +30,6 @@ func NewMongodbJobs(dbClient DbClient[*mongo.Client], cfg config.Database) (*Mon
 }
 
 func (m *MongodbJobs) Save(ctx context.Context, job domain.Job) (string, error) {
-
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: job.ID}}
 
@@ -45,10 +44,6 @@ func (m *MongodbJobs) Save(ctx context.Context, job domain.Job) (string, error) 
 
 	// If no document was updated, insert a new one
 	if result.MatchedCount == 0 {
-		// Create a document with _id explicitly set
-		doc := bson.D{
-			{Key: "_id", Value: job.ID},
-		}
 		// Convert job to BSON document
 		jobDoc, err := bson.Marshal(job)
 		if err != nil {
@@ -58,13 +53,12 @@ func (m *MongodbJobs) Save(ctx context.Context, job domain.Job) (string, error) 
 		if err := bson.Unmarshal(jobDoc, &jobMap); err != nil {
 			return "", err
 		}
-		// Add all other job fields
-		for k, v := range jobMap {
-			if k != "_id" { // Skip _id as we already set it
-				doc = append(doc, bson.E{Key: k, Value: v})
-			}
-		}
-		_, err = m.collection.InsertOne(ctx, doc)
+
+		// Ensure _id is set correctly
+		jobMap["_id"] = job.ID
+		delete(jobMap, "id") // Remove the "id" field if it exists
+
+		_, err = m.collection.InsertOne(ctx, jobMap)
 		if err != nil {
 			return "", err
 		}

@@ -1,16 +1,20 @@
-# Giobba: a go distributed jobs executer
+# Giobba: A Go Distributed Job Executor
 
-**Giobba** is a flexible distributed task scheduling system that allows you to create and manage tasks with different priorities, scheduling options, and execution modes.
+**Giobba** is a flexible distributed task scheduling system that allows you to create and manage tasks with different priorities, scheduling options, and execution modes. It provides a robust solution for handling distributed workloads with features like task dependencies, priority-based execution, and automatic/manual task triggering.
 
+## Architecture
 
-**Giobba** relies on a broker for queueing-pub/sub tasks and a database for tasks persistance.
+Giobba uses a distributed architecture with the following components:
 
-*In default implementation the broker is **redis** and the database is **mongodb***
+- **Broker**: Handles task queuing and pub/sub communication (default: Redis)
+- **Database**: Stores task and job persistence (default: MongoDB)
+- **Scheduler**: Manages task execution and worker coordination
+- **Workers**: Execute tasks in parallel across multiple instances
 
 ## Features
 
 - Distributed task execution with multiple workers
-- task ETA scheduling with priorities (0-10)
+- Task ETA scheduling with priorities (0-10)
 - Support for task dependencies (parent-child relationships)
 - Automatic and manual task execution modes
 - Task persistence in MongoDB
@@ -18,30 +22,11 @@
 - Configurable number of workers and queues
 - Task locking mechanism to prevent duplicate execution
 - Graceful shutdown support
-
-## Best Practices
-
-1. Always check for context cancellation in long-running tasks
-2. Use appropriate task priorities based on importance
-3. Implement proper error handling and logging
-4. Use callbacks for task completion notifications
-5. Consider using child tasks and manual triggering for complex workflows
-6. Set appropriate ETA values and priorities for scheduled tasks
-
-## Task Properties
-
-Tasks have several configurable properties:
-
-- `Name`: Unique identifier for the task type
-- `Payload`: Map of data to be processed by the handler
-- `Queue`: Queue where the task will be processed
-- `State`: Current state of the task (PENDING, RUNNING, COMPLETED, FAILED, REVOKED, KILLED)
-- `ETA`: Expected time of arrival/execution
-- `Priority`: Task priority (0-10, higher is more important)
-- `StartMode`: AUTO or MANUAL
-- `ParentID`: ID of the parent task (for task chains)
-- `Callback`: URL to call when task completes successfully
-- `CallbackErr`: URL to call when task fails
+- Cron-style scheduling support
+- Task callbacks for success/failure notifications
+- Task retry mechanism with configurable attempts
+- Task expiration support
+- Worker health monitoring and heartbeats
 
 ## Installation
 
@@ -64,35 +49,73 @@ version: 0.1.0
 queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 60
+jobsTimeoutRefresh: 300
 
 database:
   url: "mongodb://localhost:27017"
   db: giobba
-  collection: tasks
+  tasksCollection: tasks
+  jobsCollection: jobs
 
 broker:
   url: "redis://localhost:6379/0"
 ```
 
-You can also use environment variables to override configuration values:
-- `GIOBBA_ENV`: Environment name (e.g., "dev", "prod" to select giobba-[dev|prod].yml environment specific config file)
+### Environment Variables
+
+You can override configuration values using environment variables:
+- `GIOBBA_ENV`: Environment name (e.g., "dev", "prod" to select giobba-[dev|prod].yml)
 - `GIOBBA_DATABASE_URL`: MongoDB connection URL
 - `GIOBBA_BROKER_URL`: Redis connection URL
+- `GIOBBA_DATABASE_PORT`: MongoDB port
+- `GIOBBA_DATABASE_ADMIN_USERNAME`: MongoDB admin username
+- `GIOBBA_DATABASE_ADMIN_PASSWORD`: MongoDB admin password
+- `GIOBBA_BROKER_PORT`: Redis port
+- `GIOBBA_BROKER_ADMIN_USERNAME`: Redis admin username
+- `GIOBBA_BROKER_ADMIN_PASSWORD`: Redis admin password
+- `GIOBBA_BROKER_DB`: Redis database number
+
+## Task Properties
+
+Tasks have several configurable properties:
+
+- `ID`: Unique identifier for the task
+- `Name`: Unique identifier for the task type
+- `Payload`: Map of data to be processed by the handler
+- `Queue`: Queue where the task will be processed
+- `State`: Current state of the task (PENDING, RUNNING, COMPLETED, FAILED, REVOKED, KILLED)
+- `ETA`: Expected time of arrival/execution
+- `Priority`: Task priority (0-10, higher is more important)
+- `StartMode`: AUTO or MANUAL
+- `ParentID`: ID of the parent task (for task chains)
+- `Schedule`: Cron expression for recurring tasks (ie. 0 0 * * *)
+- `IsScheduleActive`: Whether the schedule is active
+- `JobID`: Associated job ID for scheduled tasks
+- `Error`: Last error message if task failed
+- `CreatedAt`: Task creation timestamp
+- `UpdatedAt`: Last update timestamp
+- `StartedAt`: Task start timestamp
+- `CompletedAt`: Task completion timestamp
+- `ExpiresAt`: Task expiration timestamp
+- `Result`: Task execution result
+- `Retries`: Number of retry attempts
+- `MaxRetries`: Maximum number of retry attempts
+- `Tags`: Custom tags for task categorization
+- `SchedulerID`: ID of the scheduler that processed the task
+- `WorkerID`: ID of the worker that executed the task
+- `ChildrenID`: IDs of child tasks
+- `Callback`: URL to call when task completes successfully
+- `CallbackErr`: URL to call when task fails
 
 ## Usage
 
 ### Creating Custom Task Handlers
 
-To create a custom task handler, you can embed the `BaseHandler` struct and implement the `Run` method. 
-
-The custom handler will address your business problem. Once created, the handler must be registered on the scheduler.
-
-Here's an example of custom handler, i.e. `MyHandler`
+To create a custom task handler, embed the `BaseHandler` struct and implement the `Run` method:
 
 ```go
-
 type MyHandler struct {
-	BaseHandler
+    BaseHandler
 }
 
 func (m *MyHandler) Run(ctx context.Context, task domain.Task) error {
@@ -106,7 +129,7 @@ func (m *MyHandler) Run(ctx context.Context, task domain.Task) error {
 
     // Check for cancellation
     select {
-        case <-ctx.Done():
+    case <-ctx.Done():
         return fmt.Errorf("task cancelled")
     default:
         // Continue with work
@@ -114,12 +137,12 @@ func (m *MyHandler) Run(ctx context.Context, task domain.Task) error {
 
     return nil
 }
-
 ```
 
-Add `MyHandler` to Handlers map before start giobba. The `key` of the added handler must be the value of the name field of the Task to process 
+Register your handler before starting Giobba:
+
 ```go
-handler.Handlers["myHandler", &MyHandler{}]
+handler.Handlers["myHandler"] = &MyHandler{}
 ```
 
 ### Basic Example
@@ -138,7 +161,7 @@ import (
 
 func main() {
     // Add custom handler
-    handler.Handlers["myHandler", &MyHandler{}]
+    handler.Handlers["myHandler"] = &MyHandler{}
 
     // Start giobba
     go giobba.Giobba()
@@ -164,36 +187,11 @@ func main() {
 }
 ```
 
-## Other usecases
-
-### Parent Child Tasks
-
-```go
-// Create a parent task
-parentTask, _ := domain.NewTask("myHandler", payload, "default", time.Now(), 5, domain.AUTO, "")
-parentId, _ := scheduler.AddTask(parentTask)
-
-// Create a child task that depends on the parent
-childTask, _ := domain.NewTask("myHandler", childPayload, "default", time.Now(), 5, domain.AUTO, parentId)
-scheduler.AddTask(childTask)
-```
-
-### Manual Task Execution
-
-```go
-// Create a task with manual start mode
-task, _ := domain.NewTask("myHandler", payload, "default", time.Now(), 5, domain.MANUAL, "")
-taskId, _ := scheduler.AddTask(task)
-
-// Manually start the task when ready
-scheduler.AutoTask(taskId, "default")
-```
-
-### Tasks creation helpers
+### Task Creation Helpers
 
 The package provides several helper functions to create tasks with different configurations:
 
-### Basic Task
+#### Basic Task
 ```go
 task, err := handlers.NewDefaultTask(
     "my-task",
@@ -204,7 +202,7 @@ task, err := handlers.NewDefaultTask(
 )
 ```
 
-### Child Task
+#### Child Task
 ```go
 task, err := handlers.NewChildTask(
     "child-task",
@@ -216,7 +214,7 @@ task, err := handlers.NewChildTask(
 )
 ```
 
-### Manual Task
+#### Manual Task
 ```go
 task, err := handlers.NewManualTask(
     "manual-task",
@@ -227,7 +225,7 @@ task, err := handlers.NewManualTask(
 )
 ```
 
-### High Priority Task
+#### High Priority Task
 ```go
 task, err := handlers.NewHighPriorityTask(
     "high-priority-task",
@@ -238,7 +236,7 @@ task, err := handlers.NewHighPriorityTask(
 )
 ```
 
-### Scheduled Task
+#### Scheduled Task
 ```go
 task, err := handlers.NewScheduledTask(
     "scheduled-task",
@@ -250,7 +248,21 @@ task, err := handlers.NewScheduledTask(
 )
 ```
 
+## Best Practices
+
+1. Always check for context cancellation in long-running tasks
+2. Use appropriate task priorities based on importance
+3. Implement proper error handling and logging
+4. Use callbacks for task completion notifications
+5. Consider using child tasks and manual triggering for complex workflows
+6. Set appropriate ETA values and priorities for scheduled tasks
+7. Use task tags for better organization and filtering
+8. Implement proper error handling in task callbacks
+9. Monitor worker health through heartbeats
+10. Use task expiration for cleanup of old tasks
+11. Configure appropriate retry policies for failed tasks
+12. Use task locking to prevent duplicate execution
 
 ## License
-        
+
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

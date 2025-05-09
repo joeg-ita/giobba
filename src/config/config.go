@@ -42,6 +42,7 @@ type Config struct {
 	WorkersNumber      int      `yaml:"workersNumber"`
 	LockDuration       int      `yaml:"lockDuration"`
 	JobsTimeoutRefresh int      `yaml:"jobsTimeoutRefresh"`
+	PollingTimeout     int      `yaml:"pollingTimeout"`
 }
 
 func LoadConfig() (*Config, error) {

@@ -17,23 +17,38 @@ import (
 
 func Giobba() {
 	fmt.Println("Giobba")
-	cfg, _ := config.LoadConfig()
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Panic("unable to load configuration")
+	}
 	fmt.Println("Configuration", cfg.Broker.Url)
 
 	brokerClient := services.NewRedisBrokerByUrl(cfg.Broker.Url)
 
 	mongodbClient, err := services.NewMongodbClient(cfg.Database)
 	if err != nil {
-		log.Printf("unable to load database client")
-
+		log.Panic("unable to load database client")
 	}
 	mongodbJobs, err := services.NewMongodbJobs(mongodbClient, cfg.Database)
+	if err != nil {
+		log.Panic("unable to load jobs implementation")
+	}
 	mongodbTasks, err := services.NewMongodbTasks(mongodbClient, cfg.Database)
+	if err != nil {
+		log.Panic("unable to load tasks implementation")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	scheduler := usecases.NewScheduler(ctx, brokerClient, mongodbTasks, mongodbJobs, cfg.Queues, cfg.WorkersNumber, cfg.LockDuration)
+	scheduler := usecases.NewScheduler(ctx,
+		brokerClient,
+		mongodbTasks,
+		mongodbJobs,
+		cfg.Queues,
+		cfg.WorkersNumber,
+		cfg.LockDuration,
+		cfg.PollingTimeout)
 
 	for name, handler := range handlers.Handlers {
 		if utils.CheckInterface[services.TaskHandlerInt](handler) {

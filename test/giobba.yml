@@ -4,6 +4,7 @@ queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 10
 jobsTimeoutRefresh: 60
+pollingTimeout: 1
 
 database:
   url: "mongodb://localhost:27017"

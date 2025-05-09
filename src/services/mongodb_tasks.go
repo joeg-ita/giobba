@@ -28,7 +28,6 @@ func NewMongodbTasks(dbClient DbClient[*mongo.Client], cfg config.Database) (*Mo
 }
 
 func (m *MongodbTasks) SaveTask(ctx context.Context, task domain.Task) (string, error) {
-
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: task.ID}}
 
@@ -43,10 +42,6 @@ func (m *MongodbTasks) SaveTask(ctx context.Context, task domain.Task) (string, 
 
 	// If no document was updated, insert a new one
 	if result.MatchedCount == 0 {
-		// Create a document with _id explicitly set
-		doc := bson.D{
-			{Key: "_id", Value: task.ID},
-		}
 		// Convert task to BSON document
 		taskDoc, err := bson.Marshal(task)
 		if err != nil {
@@ -56,13 +51,12 @@ func (m *MongodbTasks) SaveTask(ctx context.Context, task domain.Task) (string, 
 		if err := bson.Unmarshal(taskDoc, &taskMap); err != nil {
 			return "", err
 		}
-		// Add all other task fields
-		for k, v := range taskMap {
-			if k != "_id" { // Skip _id as we already set it
-				doc = append(doc, bson.E{Key: k, Value: v})
-			}
-		}
-		_, err = m.collection.InsertOne(ctx, doc)
+
+		// Ensure _id is set correctly
+		taskMap["_id"] = task.ID
+		delete(taskMap, "id") // Remove the "id" field if it exists
+
+		_, err = m.collection.InsertOne(ctx, taskMap)
 		if err != nil {
 			return "", err
 		}

@@ -32,7 +32,7 @@ type Worker struct {
 	cancel        context.CancelFunc
 	processing    bool
 	currentTaskId string
-	mutex         sync.Mutex
+	mutex         sync.RWMutex
 }
 
 type Scheduler struct {
@@ -52,9 +52,20 @@ type Scheduler struct {
 	Mutex             sync.Mutex
 	FailedExecutions  int
 	SuccessExecutions int
+	shutdownChan      chan struct{}
+	shutdownWg        sync.WaitGroup
+	isShuttingDown    bool
+	shutdownTimeout   time.Duration
 }
 
-func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, queues []string, maxWorkers int, lockDuration int) Scheduler {
+func NewScheduler(
+	ctx context.Context,
+	brokerClient services.BrokerInt,
+	dbTasksClient services.DbTasksInt,
+	dbJobsClient services.DbJobsInt,
+	queues []string, maxWorkers int,
+	lockDuration int,
+	pollingTimeout int) Scheduler {
 
 	hostname, _ := os.Hostname()
 	schedulerUuid := uuid.New().String()
@@ -90,9 +101,11 @@ func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbTasksC
 		Workers:           workers,
 		MaxWorkers:        maxWorkers,
 		LockDuration:      time.Duration(lockDuration) * time.Second,
-		PollingTimeout:    time.Duration(1) * time.Second,
+		PollingTimeout:    time.Duration(pollingTimeout) * time.Second,
 		FailedExecutions:  0,
 		SuccessExecutions: 0,
+		shutdownChan:      make(chan struct{}),
+		shutdownTimeout:   time.Duration(30) * time.Second, // 30 second shutdown timeout
 	}
 }
 
@@ -159,14 +172,21 @@ func (s *Scheduler) startWorker(worker *Worker) {
 		case <-worker.context.Done():
 			log.Printf("worker [%s] shutting down", worker.Id)
 			return
+		case <-s.shutdownChan:
+			log.Printf("worker [%s] received shutdown signal", worker.Id)
+			return
 		default:
-			// Check if worker is already processing
-			worker.mutex.Lock()
+			// Use RLock for checking processing state
+			worker.mutex.RLock()
 			if worker.processing {
-				worker.mutex.Unlock()
+				worker.mutex.RUnlock()
 				time.Sleep(s.PollingTimeout)
 				continue
 			}
+			worker.mutex.RUnlock()
+
+			// Lock only when we're about to change the state
+			worker.mutex.Lock()
 			worker.processing = true
 			worker.mutex.Unlock()
 
@@ -174,8 +194,13 @@ func (s *Scheduler) startWorker(worker *Worker) {
 			if time.Now().Unix()%10 == 0 {
 				log.Printf("worker %v (-_-) zzz", worker.Id)
 			}
-			err := s.fetchAndProcessTask(worker)
 
+			// Add to wait group before processing task
+			s.shutdownWg.Add(1)
+			err := s.fetchAndProcessTask(worker)
+			s.shutdownWg.Done()
+
+			// Update worker state atomically
 			worker.mutex.Lock()
 			worker.processing = false
 			worker.currentTaskId = ""
@@ -348,14 +373,14 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 
 			s.Tasker.Notify(context.Background(), task)
 
-			// Set the currentTaskId before executing the task
+			// Update worker state atomically when setting currentTaskId
 			worker.mutex.Lock()
 			worker.currentTaskId = task.ID
 			worker.mutex.Unlock()
 
 			task, err := s.executeTask(worker, task)
 
-			// Clear the currentTaskId after execution
+			// Update worker state atomically when clearing currentTaskId
 			worker.mutex.Lock()
 			worker.currentTaskId = ""
 			worker.mutex.Unlock()
@@ -376,6 +401,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, error) {
 	log.Printf("worker %v is executing task %v", worker.Id, task.ID)
 
+	// Create new context and update worker state atomically
 	worker.mutex.Lock()
 	ctx, cancel := context.WithCancel(s.context)
 	worker.context = ctx
@@ -406,19 +432,22 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 			if task.Callback != "" {
 				go s.Tasker.Callback(task.Callback, task.Result)
 			}
+			s.Mutex.Lock()
 			s.SuccessExecutions++
+			s.Mutex.Unlock()
 		} else {
 			log.Printf("task %s failed!", task.ID)
 			task.State = domain.FAILED
 			task.Error = err.Error()
+			s.Mutex.Lock()
 			s.FailedExecutions++
+			s.Mutex.Unlock()
 			if task.CallbackErr != "" {
 				errMsg := map[string]interface{}{
 					"error": task.Error,
 				}
 				go s.Tasker.Callback(task.CallbackErr, errMsg)
 			}
-
 		}
 		s.brokerClient.SaveTask(task, task.Queue)
 		s.brokerClient.UnLock(task.ID, task.Queue)
@@ -446,7 +475,51 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 
 // Stop gracefully stops the task scheduler
 func (s *Scheduler) Stop() {
-	// Close Redis connection
+	log.Printf("Initiating graceful shutdown of scheduler %s", s.Id)
+
+	// Set shutdown flag with proper mutex handling
+	s.Mutex.Lock()
+	if s.isShuttingDown {
+		s.Mutex.Unlock()
+		return
+	}
+	s.isShuttingDown = true
+	s.Mutex.Unlock()
+
+	// Create a context with timeout for shutdown
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
+	defer cancel()
+
+	// Signal all workers to stop accepting new tasks
+	close(s.shutdownChan)
+
+	// Wait for all in-flight tasks to complete
+	done := make(chan struct{})
+	go func() {
+		s.shutdownWg.Wait()
+		close(done)
+	}()
+
+	// Wait for either all tasks to complete or timeout
+	select {
+	case <-done:
+		log.Printf("All in-flight tasks completed successfully")
+	case <-shutdownCtx.Done():
+		log.Printf("Shutdown timed out after %v", s.shutdownTimeout)
+	}
+
+	// Cancel all worker contexts with proper mutex handling
+	for _, worker := range s.Workers {
+		worker.mutex.Lock()
+		if worker.cancel != nil {
+			worker.cancel()
+		}
+		worker.mutex.Unlock()
+	}
+
+	// Close all connections
 	s.brokerClient.Close()
 	s.dbClient.Close(s.context)
+
+	log.Printf("Scheduler %s shutdown complete", s.Id)
 }

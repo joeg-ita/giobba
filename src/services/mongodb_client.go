@@ -85,7 +85,7 @@ func createWildcardTextIndexIfNotExists(collection *mongo.Collection) error {
 	if !indexExists {
 		// Create a text index on all fields using "$**"
 		indexModel := mongo.IndexModel{
-			Keys:    bson.D{{"$**", "text"}},
+			Keys:    bson.D{{Key: "$**", Value: "text"}},
 			Options: options.Index().SetName(indexName),
 		}
 
