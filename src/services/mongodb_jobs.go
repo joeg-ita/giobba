@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/domain"
@@ -117,11 +118,16 @@ func (m *MongodbJobs) Retrieve(ctx context.Context, jobId string) (domain.Job, e
 func (m *MongodbJobs) RetrieveMany(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Job, error) {
 
 	// Create filter based on query string
-	var filter bson.M
+	var filter bson.D
 	if query != "" {
-		filter = bson.M{"$text": bson.M{"$search": query}}
+		q := strings.Split(query, ":")
+		if len(q) > 0 {
+			filter = bson.D{{q[0], q[1]}}
+		} else {
+			filter = bson.D{{"$text", bson.D{{"$search", query}}}}
+		}
 	} else {
-		filter = bson.M{}
+		filter = bson.D{}
 	}
 
 	// Create find options for pagination and sorting

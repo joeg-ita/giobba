@@ -8,10 +8,9 @@ import (
 
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
-	"github.com/joeg-ita/giobba/src/utils"
 )
 
-type Tasks struct {
+type Tasker struct {
 	brokerClient  services.BrokerInt
 	dbTasksClient services.DbTasksInt
 	dbJobsClient  services.DbJobsInt
@@ -19,8 +18,8 @@ type Tasks struct {
 	LockDuration  time.Duration
 }
 
-func NewTaskUtils(brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, restClient services.RestInt, lockDuration time.Duration) *Tasks {
-	return &Tasks{
+func NewTaskUtils(brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, restClient services.RestInt, lockDuration time.Duration) *Tasker {
+	return &Tasker{
 		brokerClient:  brokerClient,
 		dbTasksClient: dbTasksClient,
 		dbJobsClient:  dbJobsClient,
@@ -29,7 +28,7 @@ func NewTaskUtils(brokerClient services.BrokerInt, dbTasksClient services.DbTask
 	}
 }
 
-func (t *Tasks) AddTask(task domain.Task) (string, error) {
+func (t *Tasker) AddTask(task domain.Task) (string, error) {
 
 	log.Printf("adding task %v", task)
 
@@ -39,11 +38,8 @@ func (t *Tasks) AddTask(task domain.Task) (string, error) {
 		return "", err
 	}
 
-	err = utils.ParseCronSchedule(task.Schedule)
-	if err != nil {
-		log.Printf("task schedule unset %v", err)
-	} else {
-		job, err := domain.NewJob(task.Schedule, task.ID, task.ETA, true)
+	if task.Schedule != "" {
+		job, err := domain.NewJob(task.Schedule, task.ID, task.Queue, task.ETA, task.ExpiresAt, true)
 		if err != nil {
 			return "", err
 		}
@@ -66,13 +62,13 @@ func (t *Tasks) AddTask(task domain.Task) (string, error) {
 	return taskId, nil
 }
 
-func (t *Tasks) AddJob(job domain.Job) error {
+func (t *Tasker) AddJob(job domain.Job) error {
 	_, err := t.dbJobsClient.Save(context.Background(), job)
 	return err
 }
 
 // Update KillTask to properly handle cancellation
-func (t *Tasks) KillTask(ctx context.Context, worker *Worker, taskID string, queue string) error {
+func (t *Tasker) KillTask(ctx context.Context, worker *Worker, taskID string, queue string) error {
 	log.Printf("killing task %v", taskID)
 	task, err := t.brokerClient.GetTask(taskID, queue)
 	if err != nil {
@@ -104,7 +100,7 @@ func (t *Tasks) KillTask(ctx context.Context, worker *Worker, taskID string, que
 	return nil
 }
 
-func (t *Tasks) RevokeTask(taskID string, queue string) error {
+func (t *Tasker) RevokeTask(taskID string, queue string) error {
 
 	if t.brokerClient.Lock(taskID, queue, t.LockDuration) {
 		log.Printf("revoking task %v", taskID)
@@ -131,7 +127,7 @@ func (t *Tasks) RevokeTask(taskID string, queue string) error {
 	return nil
 }
 
-func (t *Tasks) AutoTask(taskID string, queue string) error {
+func (t *Tasker) AutoTask(taskID string, queue string) error {
 
 	if t.brokerClient.Lock(taskID, queue, t.LockDuration) {
 		log.Printf("setting task %v to auto run", taskID)
@@ -157,7 +153,7 @@ func (t *Tasks) AutoTask(taskID string, queue string) error {
 	return nil
 }
 
-func (t *Tasks) TaskState(taskID string, queue string) (domain.TaskState, error) {
+func (t *Tasker) TaskState(taskID string, queue string) (domain.TaskState, error) {
 
 	task, err := t.Task(taskID, queue)
 	if err != nil {
@@ -167,7 +163,7 @@ func (t *Tasks) TaskState(taskID string, queue string) (domain.TaskState, error)
 	return task.State, nil
 }
 
-func (t *Tasks) Task(taskID string, queue string) (domain.Task, error) {
+func (t *Tasker) Task(taskID string, queue string) (domain.Task, error) {
 
 	task, err := t.brokerClient.GetTask(taskID, queue)
 	if err != nil {
@@ -177,14 +173,14 @@ func (t *Tasks) Task(taskID string, queue string) (domain.Task, error) {
 	return task, nil
 }
 
-func (t *Tasks) Callback(url string, payload map[string]interface{}) {
+func (t *Tasker) Callback(url string, payload map[string]interface{}) {
 	err := t.restClient.Post(url, payload)
 	if err != nil {
 		log.Println(err)
 	}
 }
 
-func (t *Tasks) Notify(ctx context.Context, task domain.Task) {
+func (t *Tasker) Notify(ctx context.Context, task domain.Task) {
 
 	t.brokerClient.Publish(ctx, ACTIVITIES_CHANNEL, map[string]interface{}{
 		"workerId": task.WorkerID,

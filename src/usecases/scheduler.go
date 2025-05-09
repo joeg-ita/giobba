@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
+	"github.com/joeg-ita/giobba/src/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -40,7 +41,7 @@ type Scheduler struct {
 	brokerClient      services.BrokerInt
 	dbClient          services.DbTasksInt
 	restClient        services.RestInt
-	Tasks             Tasks
+	Tasker            Tasker
 	Queues            []string
 	Hostname          string
 	Handlers          map[string]services.TaskHandlerInt
@@ -60,7 +61,7 @@ func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbTasksC
 	schedulerId := fmt.Sprintf("sched-%s-%s", hostname, schedulerUuid[:8])
 
 	workers := make(map[string]*Worker, maxWorkers)
-	for i := 0; i < maxWorkers; i++ {
+	for i := range maxWorkers {
 		wCtx, wCanc := context.WithCancel(ctx)
 		id := fmt.Sprintf("%s-w-%d", schedulerId, i)
 		workers[id] = &Worker{
@@ -79,7 +80,7 @@ func NewScheduler(ctx context.Context, brokerClient services.BrokerInt, dbTasksC
 	return Scheduler{
 		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
 		context:           ctx,
-		Tasks:             *taskUtils,
+		Tasker:            *taskUtils,
 		brokerClient:      brokerClient,
 		dbClient:          dbTasksClient,
 		restClient:        httpService,
@@ -107,13 +108,14 @@ func (s *Scheduler) Start() {
 	for i := range s.Workers {
 		go s.startWorker(s.Workers[i])
 	}
-	go s.startPubSub()
+	go s.startCron(s.context)
+	go s.startPubSub(s.context)
 	go s.heartbeat(s.context)
 }
 
-func (s *Scheduler) startPubSub() {
+func (s *Scheduler) startPubSub(ctx context.Context) {
 	log.Printf("subscribing channel %s", SERVICES_CHANNEL)
-	pubsub := (s.brokerClient.Subscribe(s.context, SERVICES_CHANNEL)).(*redis.PubSub)
+	pubsub := (s.brokerClient.Subscribe(ctx, SERVICES_CHANNEL)).(*redis.PubSub)
 	defer pubsub.Close()
 	ch := pubsub.Channel()
 
@@ -122,12 +124,12 @@ func (s *Scheduler) startPubSub() {
 		splitted := strings.Split(msg.Payload, ":")
 		if len(splitted) == 3 {
 			if strings.ToUpper(splitted[0]) == "KILL" {
-				task, _ := s.Tasks.brokerClient.GetTask(splitted[2], splitted[1])
-				s.Tasks.KillTask(s.context, s.Workers[task.WorkerID], splitted[2], splitted[1])
+				task, _ := s.Tasker.brokerClient.GetTask(splitted[2], splitted[1])
+				s.Tasker.KillTask(ctx, s.Workers[task.WorkerID], splitted[2], splitted[1])
 			} else if strings.ToUpper(splitted[0]) == "REVOKE" {
-				s.Tasks.RevokeTask(splitted[2], splitted[1])
+				s.Tasker.RevokeTask(splitted[2], splitted[1])
 			} else if strings.ToUpper(splitted[0]) == "AUTO" {
-				s.Tasks.AutoTask(splitted[2], splitted[1])
+				s.Tasker.AutoTask(splitted[2], splitted[1])
 			}
 		}
 	}
@@ -190,6 +192,63 @@ func (s *Scheduler) startWorker(worker *Worker) {
 			}
 			time.Sleep(s.PollingTimeout)
 		}
+	}
+}
+
+func (s *Scheduler) startCron(ctx context.Context) {
+	log.Printf("cron scheduler %v starting", s.Id)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("cron shutting down")
+			return
+		default:
+			log.Printf("cron fetching tasks")
+			jobs, err := s.Tasker.dbJobsClient.RetrieveMany(ctx, "", 0, 100, nil)
+			log.Printf("retrieved %d scheduled tasks", len(jobs))
+			if err != nil {
+				log.Println(err.Error())
+			}
+			for i := range jobs {
+				job := jobs[i]
+				taskId := job.TaskID
+				queue := job.TaskQueue
+				if s.brokerClient.Lock(taskId, queue, s.LockDuration) {
+					log.Printf("retrieving scheduled task %v", taskId)
+					task, err := s.Tasker.Task(taskId, queue)
+					if err != nil {
+						log.Println(err.Error())
+						job.IsActive = false
+						s.Tasker.dbJobsClient.Save(ctx, job)
+						continue
+					}
+					if task.State == domain.COMPLETED {
+						nextExecution := utils.CalculateNextExecution(job.Schedule, time.Now())
+						if job.LastExecution.After(nextExecution) {
+							task.ETA = nextExecution
+							task.State = domain.PENDING
+							_, err := s.brokerClient.SaveTask(task, task.Queue)
+							if err != nil {
+								log.Printf("unable to update task %v", task.ID)
+							}
+							err = s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+							if err != nil {
+								log.Printf("unable to schedule task %v on queue %v", task.ID, task.Queue)
+							}
+							log.Printf("task schedule update for task %v - next execution %v", task.ID, task.ETA)
+							s.Tasker.Notify(ctx, task)
+						} else {
+							job.IsActive = false
+							s.Tasker.dbJobsClient.Save(ctx, job)
+							log.Printf("task schedule expired for task %v", task.ID)
+						}
+					}
+					s.brokerClient.UnLock(taskId, queue)
+				}
+			}
+		}
+		time.Sleep(15 * time.Second)
 	}
 }
 
@@ -287,7 +346,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			s.brokerClient.SaveTask(task, taskQueue)
 			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue)
 
-			s.Tasks.Notify(context.Background(), task)
+			s.Tasker.Notify(context.Background(), task)
 
 			// Set the currentTaskId before executing the task
 			worker.mutex.Lock()
@@ -301,7 +360,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			worker.currentTaskId = ""
 			worker.mutex.Unlock()
 
-			s.Tasks.Notify(context.Background(), task)
+			s.Tasker.Notify(context.Background(), task)
 
 			if err != nil {
 				return err
@@ -345,7 +404,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 			task.State = domain.COMPLETED
 			task.CompletedAt = time.Now()
 			if task.Callback != "" {
-				go s.Tasks.Callback(task.Callback, task.Result)
+				go s.Tasker.Callback(task.Callback, task.Result)
 			}
 			s.SuccessExecutions++
 		} else {
@@ -357,7 +416,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 				errMsg := map[string]interface{}{
 					"error": task.Error,
 				}
-				go s.Tasks.Callback(task.CallbackErr, errMsg)
+				go s.Tasker.Callback(task.CallbackErr, errMsg)
 			}
 
 		}
@@ -378,7 +437,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 			errMsg := map[string]interface{}{
 				"error": task.Error,
 			}
-			go s.Tasks.Callback(task.CallbackErr, errMsg)
+			go s.Tasker.Callback(task.CallbackErr, errMsg)
 		}
 
 		return task, errorMsg
@@ -387,7 +446,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 
 // Stop gracefully stops the task scheduler
 func (s *Scheduler) Stop() {
-
 	// Close Redis connection
 	s.brokerClient.Close()
+	s.dbClient.Close(s.context)
 }

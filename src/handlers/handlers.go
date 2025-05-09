@@ -78,7 +78,7 @@ func NewHighPriorityTask(name string, payload map[string]interface{}, queue stri
 }
 
 // Helper function to create a scheduled task
-func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time) (domain.Task, error) {
+func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time, expiresAt time.Time) (domain.Task, error) {
 	return domain.NewScheduledTask(
 		name,
 		payload,
@@ -86,6 +86,7 @@ func NewScheduledTask(name string, payload map[string]interface{}, queue string,
 		eta,
 		"5 * * * *",
 		true,
+		expiresAt,
 		5,
 	)
 }

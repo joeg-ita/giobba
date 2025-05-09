@@ -45,7 +45,7 @@ type Task struct {
 	UpdatedAt        time.Time              `json:"updated_at,omitempty"`
 	StartedAt        time.Time              `json:"started_at,omitempty"`
 	CompletedAt      time.Time              `json:"completed_at,omitempty"`
-	ExpireAt         time.Time              `json:"expire_at,omitempty"`
+	ExpiresAt        time.Time              `json:"expires_at,omitempty"`
 	Result           map[string]interface{} `json:"result,omitempty"`
 	Retries          int                    `json:"retries,omitempty"`
 	MaxRetries       int                    `json:"max_retries,omitempty"`
@@ -83,7 +83,7 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 	return task, nil
 }
 
-func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time, schedule string, isScheduleActive bool, priority int) (Task, error) {
+func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time, schedule string, isScheduleActive bool, expiresAt time.Time, priority int) (Task, error) {
 	id := uuid.New().String()
 
 	task := Task{
@@ -92,6 +92,7 @@ func NewScheduledTask(name string, payload map[string]interface{}, queue string,
 		Payload:          payload,
 		Queue:            queue,
 		ETA:              eta,
+		ExpiresAt:        expiresAt,
 		Schedule:         schedule,
 		IsScheduleActive: isScheduleActive,
 		Priority:         priority,
@@ -104,6 +105,8 @@ func NewScheduledTask(name string, payload map[string]interface{}, queue string,
 	if err != nil {
 		return Task{}, err
 	}
+
+	fmt.Println(task)
 
 	return task, nil
 }

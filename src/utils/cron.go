@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"log"
 	"time"
 
 	"github.com/gorhill/cronexpr"
@@ -12,5 +13,7 @@ func ParseCronSchedule(schedule string) error {
 }
 
 func CalculateNextExecution(schedule string, from time.Time) time.Time {
-	return cronexpr.MustParse(schedule).Next(from)
+	next := cronexpr.MustParse(schedule).Next(from)
+	log.Printf("calculated next schedule %v", next)
+	return next
 }
