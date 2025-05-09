@@ -40,6 +40,7 @@ type Scheduler struct {
 	context           context.Context
 	brokerClient      services.BrokerInt
 	dbClient          services.DbTasksInt
+	dbJobsClient      services.DbJobsInt
 	restClient        services.RestInt
 	Tasker            Tasker
 	Queues            []string
@@ -56,6 +57,7 @@ type Scheduler struct {
 	shutdownWg        sync.WaitGroup
 	isShuttingDown    bool
 	shutdownTimeout   time.Duration
+	cleanupWg         sync.WaitGroup
 }
 
 func NewScheduler(
@@ -94,6 +96,7 @@ func NewScheduler(
 		Tasker:            *taskUtils,
 		brokerClient:      brokerClient,
 		dbClient:          dbTasksClient,
+		dbJobsClient:      dbJobsClient,
 		restClient:        httpService,
 		Hostname:          hostname,
 		Handlers:          make(map[string]services.TaskHandlerInt),
@@ -105,7 +108,7 @@ func NewScheduler(
 		FailedExecutions:  0,
 		SuccessExecutions: 0,
 		shutdownChan:      make(chan struct{}),
-		shutdownTimeout:   time.Duration(30) * time.Second, // 30 second shutdown timeout
+		shutdownTimeout:   time.Duration(30) * time.Second,
 	}
 }
 
@@ -517,9 +520,46 @@ func (s *Scheduler) Stop() {
 		worker.mutex.Unlock()
 	}
 
-	// Close all connections
-	s.brokerClient.Close()
-	s.dbClient.Close(s.context)
+	// Start cleanup operations
+	s.cleanupWg.Add(3) // One for each cleanup operation
+
+	// Cleanup Redis broker
+	go func() {
+		defer s.cleanupWg.Done()
+		log.Printf("Cleaning up Redis broker connections...")
+		s.brokerClient.Close()
+		log.Printf("Redis broker cleanup completed")
+	}()
+
+	// Cleanup MongoDB tasks client
+	go func() {
+		defer s.cleanupWg.Done()
+		log.Printf("Cleaning up MongoDB tasks client...")
+		s.dbClient.Close(shutdownCtx)
+		log.Printf("MongoDB tasks client cleanup completed")
+	}()
+
+	// Cleanup MongoDB jobs client
+	go func() {
+		defer s.cleanupWg.Done()
+		log.Printf("Cleaning up MongoDB jobs client...")
+		s.dbJobsClient.Close(shutdownCtx)
+		log.Printf("MongoDB jobs client cleanup completed")
+	}()
+
+	// Wait for all cleanup operations to complete or timeout
+	cleanupDone := make(chan struct{})
+	go func() {
+		s.cleanupWg.Wait()
+		close(cleanupDone)
+	}()
+
+	select {
+	case <-cleanupDone:
+		log.Printf("All cleanup operations completed successfully")
+	case <-shutdownCtx.Done():
+		log.Printf("Cleanup operations timed out after %v", s.shutdownTimeout)
+	}
 
 	log.Printf("Scheduler %s shutdown complete", s.Id)
 }
