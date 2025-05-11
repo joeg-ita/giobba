@@ -102,7 +102,7 @@ func (r *RedisBroker) Schedule(task domain.Task, queue string) error {
 	if score < float64(time.Now().Unix()) {
 		score = float64(time.Now().Unix())
 	}
-	priority := float64(math.Abs(float64(task.Priority)-10.0)) / 100000.0
+	priority := float64(10-task.Priority) / (100000.0 / math.Pow(float64(10-task.Priority), 2))
 	finalScore := score + priority
 
 	r.client.ZAdd(context.Background(), queue, redis.Z{
@@ -120,11 +120,14 @@ func (r *RedisBroker) GetScheduled(queue string) ([]string, error) {
 	maxScore := float64(now.Add(500 * time.Millisecond).Unix())
 
 	// Otteniamo i task pronti per l'esecuzione (con score <= maxScore)
-	taskIDs, err := r.client.ZRangeByScore(context.Background(), queue, &redis.ZRangeBy{
-		Min:    "-inf",
-		Max:    fmt.Sprintf("%f", maxScore),
-		Offset: 0,
-		Count:  100, // Limitiamo a 100 task per ciclo
+	taskIDs, err := r.client.ZRangeArgs(context.Background(), redis.ZRangeArgs{
+		Key:     queue,
+		Start:   "-inf",
+		Stop:    fmt.Sprintf("%f", maxScore),
+		Offset:  0,
+		Count:   100, // Limitiamo a 100 task per ciclo
+		Rev:     false,
+		ByScore: true,
 	}).Result()
 
 	if err != nil {

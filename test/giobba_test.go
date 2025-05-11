@@ -38,12 +38,12 @@ func TestMain(m *testing.M) {
 // setupTestSuite performs one-time setup for the entire test suite
 func setupTestSuite() {
 	fmt.Println("Setting up test environment...")
-	cfg, _ = config.ConfigFromYaml("giobba.yml")
+	cfg, _ = config.ConfigFromYaml("giobba.yaml")
 	brokerClient := services.NewRedisBrokerByUrl(cfg.Broker.Url)
 	mongodbClient, _ = services.NewMongodbClient(cfg.Database)
 	mongodbTasks, _ := services.NewMongodbTasks(mongodbClient, cfg.Database)
 	mongodbJobs, _ := services.NewMongodbJobs(mongodbClient, cfg.Database)
-	scheduler = usecases.NewScheduler(context.Background(), brokerClient, mongodbTasks, mongodbJobs, []string{"default", "background"}, 1, 1, 1)
+	scheduler = usecases.NewScheduler(context.Background(), brokerClient, mongodbTasks, mongodbJobs, cfg)
 	go giobba.Giobba()
 }
 
@@ -150,6 +150,11 @@ func TestTasksWithSameDatetimeDifferentPriorities(t *testing.T) {
 		t.Log("taskid_p2 startedAt", result[taskid_p2].StartedAt)
 		t.Error("task_05 started after task_02")
 	}
+	if result[taskid_p9].StartedAt.After(result[taskid_p2].StartedAt) {
+		t.Log("taskid_p9 startedAt", result[taskid_p9].StartedAt)
+		t.Log("taskid_p2 startedAt", result[taskid_p2].StartedAt)
+		t.Error("task_09 started after task_p2")
+	}
 
 }
 
@@ -200,7 +205,7 @@ func TestJob(t *testing.T) {
 	fmt.Println("TestJob...")
 
 	now := time.Now()
-	expiresAt := now.Add(3 * time.Minute)
+	expiresAt := now.Add(2 * time.Minute)
 	queue := "background"
 
 	payload := map[string]interface{}{

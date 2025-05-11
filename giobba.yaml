@@ -21,3 +21,6 @@ broker:
   username: user
   password: pass
   db: 0
+
+log:
+  level: info  # debug, info, warn, error 

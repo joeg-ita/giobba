@@ -11,13 +11,15 @@ import (
 )
 
 // BaseHandler provides a base implementation that users can embed in their custom handlers
-type BaseHandler struct {
-	Name string
-}
+type BaseHandler struct{}
 
 // Run is the base implementation that users can override
-func (h *BaseHandler) Run(ctx context.Context, task domain.Task) error {
-	return fmt.Errorf("Run method must be implemented by custom handler")
+func (h *BaseHandler) Run(ctx context.Context, task domain.Task) services.HandlerResult {
+	result := services.HandlerResult{
+		Payload: nil,
+		Err:     fmt.Errorf("Run method must be implemented by custom handler"),
+	}
+	return result
 }
 
 // Helper function to create a new task
@@ -96,15 +98,18 @@ type Process struct {
 	BaseHandler
 }
 
-func (t *Process) Run(ctx context.Context, task domain.Task) error {
+func (t *Process) Run(ctx context.Context, task domain.Task) services.HandlerResult {
 	log.Printf("Processing task: %s", task.Name)
-
 	for i := 0; i < 5; i++ {
 		// Check for cancellation during the inner loop
 		select {
 		case <-ctx.Done():
 			log.Println("Inner loop cancelled!")
-			return fmt.Errorf("chiusa")
+			result := services.HandlerResult{
+				Payload: nil,
+				Err:     fmt.Errorf("task %v execution cancelled", task.ID),
+			}
+			return result
 		default:
 			// Continue with work
 		}
@@ -114,7 +119,15 @@ func (t *Process) Run(ctx context.Context, task domain.Task) error {
 		}
 		time.Sleep(time.Duration(500) * time.Millisecond)
 	}
-	return nil
+
+	result := services.HandlerResult{
+		Payload: map[string]interface{}{
+			"taskId": task.ID,
+			"rc":     0,
+		},
+		Err: nil,
+	}
+	return result
 }
 
 // Register all handlers

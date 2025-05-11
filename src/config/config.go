@@ -33,11 +33,16 @@ type Broker struct {
 	DB       string `yaml:"db" env:"GIOBBA_BROKER_DB"`
 }
 
+type Log struct {
+	Level string `yaml:"level"`
+}
+
 type Config struct {
 	Name               string   `yaml:"name"`
 	Version            string   `yaml:"version"`
 	Database           Database `yaml:"database"`
 	Broker             Broker   `yaml:"broker"`
+	Logger             Log      `yaml:"log"`
 	Queues             []string `yaml:"queues"`
 	WorkersNumber      int      `yaml:"workersNumber"`
 	LockDuration       int      `yaml:"lockDuration"`

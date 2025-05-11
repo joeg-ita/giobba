@@ -28,33 +28,31 @@ const (
 )
 
 type Task struct {
-	ID               string                 `json:"id"`
-	Name             string                 `json:"name"`
-	Payload          map[string]interface{} `json:"payload"`
-	Queue            string                 `json:"queue"`
-	State            TaskState              `json:"state"`
-	ETA              time.Time              `json:"eta"`
-	Priority         int                    `json:"priority"`
-	ParentID         string                 `json:"parent_id"`
-	StartMode        StartMode              `json:"startMode"`
-	Schedule         string                 `json:"schedule,omitempty"`
-	IsScheduleActive bool                   `json:"is_schedule_active,omitempty"`
-	JobID            string                 `json:"job_id,omitempty"`
-	Error            string                 `json:"error,omitempty"`
-	CreatedAt        time.Time              `json:"created_at,omitempty"`
-	UpdatedAt        time.Time              `json:"updated_at,omitempty"`
-	StartedAt        time.Time              `json:"started_at,omitempty"`
-	CompletedAt      time.Time              `json:"completed_at,omitempty"`
-	ExpiresAt        time.Time              `json:"expires_at,omitempty"`
-	Result           map[string]interface{} `json:"result,omitempty"`
-	Retries          int                    `json:"retries,omitempty"`
-	MaxRetries       int                    `json:"max_retries,omitempty"`
-	Tags             []string               `json:"tags,omitempty"`
-	SchedulerID      string                 `json:"scheduler_id,omitempty"`
-	WorkerID         string                 `json:"worker_id,omitempty"`
-	ChildrenID       []string               `json:"children_id,omitempty"`
-	Callback         string                 `json:"callback,omitempty"`
-	CallbackErr      string                 `json:"callback_err,omitempty"`
+	ID               string                 `json:"id" bson:"_id"`
+	Name             string                 `json:"name" bson:"name"`
+	Payload          map[string]interface{} `json:"payload" bson:"payload"`
+	Queue            string                 `json:"queue" bson:"queue"`
+	State            TaskState              `json:"state" bson:"state"`
+	ETA              time.Time              `json:"eta" bson:"eta"`
+	Priority         int                    `json:"priority" bson:"priority"`
+	ParentID         string                 `json:"parent_id" bson:"parent_id"`
+	StartMode        StartMode              `json:"start_mode" bson:"start_mode"`
+	Schedule         string                 `json:"schedule,omitempty" bson:"start_modeschedule,omitempty"`
+	IsScheduleActive bool                   `json:"is_schedule_active,omitempty" bson:"is_schedule_active,omitempty"`
+	JobID            string                 `json:"job_id,omitempty" bson:"job_id,omitempty"`
+	Error            string                 `json:"error,omitempty" bson:"error,omitempty"`
+	CreatedAt        time.Time              `json:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt        time.Time              `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	StartedAt        time.Time              `json:"started_at,omitempty" bson:"started_at,omitempty"`
+	CompletedAt      time.Time              `json:"completed_at,omitempty" bson:"completed_at,omitempty"`
+	ExpiresAt        time.Time              `json:"expires_at,omitempty" bson:"expires_at,omitempty"`
+	Result           map[string]interface{} `json:"result,omitempty" bson:"result,omitempty"`
+	Retries          int                    `json:"retries,omitempty" bson:"retries,omitempty"`
+	MaxRetries       int                    `json:"max_retries,omitempty" bson:"max_retries,omitempty"`
+	SchedulerID      string                 `json:"scheduler_id,omitempty" bson:"scheduler_id,omitempty"`
+	WorkerID         string                 `json:"worker_id,omitempty" bson:"worker_id,omitempty"`
+	Callback         string                 `json:"callback,omitempty" bson:"callback,omitempty"`
+	CallbackErr      string                 `json:"callback_err,omitempty" bson:"callback_err,omitempty"`
 }
 
 func NewTask(name string, payload map[string]interface{}, queue string, eta time.Time, priority int, mode StartMode, parentId string) (Task, error) {
@@ -183,14 +181,6 @@ func (t *Task) Validate() error {
 
 	if !isValidUUID(t.ParentID) {
 		return fmt.Errorf("invalid parent ID format: must be a valid UUID")
-	}
-
-	if len(t.ChildrenID) > 0 {
-		for _, id := range t.ChildrenID {
-			if !isValidUUID(id) {
-				return fmt.Errorf("invalid children ID format: must be a valid UUID")
-			}
-		}
 	}
 
 	return nil

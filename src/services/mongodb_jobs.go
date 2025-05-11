@@ -116,9 +116,9 @@ func (m *MongodbJobs) RetrieveMany(ctx context.Context, query string, skip int, 
 	if query != "" {
 		q := strings.Split(query, ":")
 		if len(q) > 0 {
-			filter = bson.D{{q[0], q[1]}}
+			filter = bson.D{{Key: q[0], Value: q[1]}}
 		} else {
-			filter = bson.D{{"$text", bson.D{{"$search", query}}}}
+			filter = bson.D{{Key: "$text", Value: bson.D{{Key: "$search", Value: query}}}}
 		}
 	} else {
 		filter = bson.D{}

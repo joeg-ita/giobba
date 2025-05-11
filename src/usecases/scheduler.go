@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/joeg-ita/giobba/src/utils"
@@ -65,16 +66,14 @@ func NewScheduler(
 	brokerClient services.BrokerInt,
 	dbTasksClient services.DbTasksInt,
 	dbJobsClient services.DbJobsInt,
-	queues []string, maxWorkers int,
-	lockDuration int,
-	pollingTimeout int) Scheduler {
+	cfg *config.Config) Scheduler {
 
 	hostname, _ := os.Hostname()
 	schedulerUuid := uuid.New().String()
 	schedulerId := fmt.Sprintf("sched-%s-%s", hostname, schedulerUuid[:8])
 
-	workers := make(map[string]*Worker, maxWorkers)
-	for i := range maxWorkers {
+	workers := make(map[string]*Worker, cfg.WorkersNumber)
+	for i := range cfg.WorkersNumber {
 		wCtx, wCanc := context.WithCancel(ctx)
 		id := fmt.Sprintf("%s-w-%d", schedulerId, i)
 		workers[id] = &Worker{
@@ -88,7 +87,7 @@ func NewScheduler(
 
 	httpService := services.NewHttpRest()
 
-	taskUtils := NewTaskUtils(brokerClient, dbTasksClient, dbJobsClient, httpService, time.Duration(lockDuration)*time.Second)
+	taskUtils := NewTaskUtils(brokerClient, dbTasksClient, dbJobsClient, httpService, time.Duration(cfg.LockDuration)*time.Second)
 
 	return Scheduler{
 		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
@@ -100,11 +99,11 @@ func NewScheduler(
 		restClient:        httpService,
 		Hostname:          hostname,
 		Handlers:          make(map[string]services.TaskHandlerInt),
-		Queues:            queues,
+		Queues:            cfg.Queues,
 		Workers:           workers,
-		MaxWorkers:        maxWorkers,
-		LockDuration:      time.Duration(lockDuration) * time.Second,
-		PollingTimeout:    time.Duration(pollingTimeout) * time.Second,
+		MaxWorkers:        cfg.WorkersNumber,
+		LockDuration:      time.Duration(cfg.LockDuration) * time.Second,
+		PollingTimeout:    time.Duration(cfg.PollingTimeout) * time.Second,
 		FailedExecutions:  0,
 		SuccessExecutions: 0,
 		shutdownChan:      make(chan struct{}),
@@ -264,13 +263,15 @@ func (s *Scheduler) startCron(ctx context.Context) {
 							if err != nil {
 								log.Printf("unable to schedule task %v on queue %v", task.ID, task.Queue)
 							}
-							log.Printf("task schedule update for task %v - next execution %v", task.ID, task.ETA)
+							job.NextExecution = nextExecution
+							log.Printf("task %v scheduled with next execution %v", task.ID, task.ETA)
 							s.Tasker.Notify(ctx, task)
 						} else {
 							job.IsActive = false
-							s.Tasker.dbJobsClient.Save(ctx, job)
 							log.Printf("task schedule expired for task %v", task.ID)
 						}
+						log.Printf("job update %v", job)
+						s.Tasker.dbJobsClient.Save(ctx, job)
 					}
 					s.brokerClient.UnLock(taskId, queue)
 				}
@@ -415,7 +416,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 	handler := s.Handlers[task.Name]
 
 	// Create a channel for the task result
-	done := make(chan error, 1)
+	done := make(chan services.HandlerResult, 1)
 
 	// Start the task in a goroutine
 	go func() {
@@ -426,11 +427,12 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 
 	// Wait for either the task to complete or the context to be cancelled
 	select {
-	case err := <-done:
+	case result := <-done:
 		// Task completed normally
-		if err == nil {
+		if result.Err == nil {
 			log.Printf("task %s completed!", task.ID)
 			task.State = domain.COMPLETED
+			task.Result = result.Payload
 			task.CompletedAt = time.Now()
 			if task.Callback != "" {
 				go s.Tasker.Callback(task.Callback, task.Result)
@@ -441,7 +443,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 		} else {
 			log.Printf("task %s failed!", task.ID)
 			task.State = domain.FAILED
-			task.Error = err.Error()
+			task.Error = result.Err.Error()
 			s.Mutex.Lock()
 			s.FailedExecutions++
 			s.Mutex.Unlock()
@@ -455,7 +457,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 		s.brokerClient.SaveTask(task, task.Queue)
 		s.brokerClient.UnLock(task.ID, task.Queue)
 
-		return task, err
+		return task, result.Err
 	case <-worker.context.Done():
 		// Task was cancelled
 		log.Printf("task %s cancelled", task.ID)

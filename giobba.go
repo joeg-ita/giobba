@@ -18,8 +18,10 @@ import (
 func Giobba() {
 	fmt.Println("Giobba")
 	cfg, err := config.LoadConfig()
+	utils.InitLogger(cfg.Logger.Level)
 	if err != nil {
-		log.Panic("unable to load configuration")
+		utils.Logger.Error("unable to load configuration")
+		panic("unable to load configuration")
 	}
 	fmt.Println("Configuration", cfg.Broker.Url)
 
@@ -45,10 +47,7 @@ func Giobba() {
 		brokerClient,
 		mongodbTasks,
 		mongodbJobs,
-		cfg.Queues,
-		cfg.WorkersNumber,
-		cfg.LockDuration,
-		cfg.PollingTimeout)
+		cfg)
 
 	for name, handler := range handlers.Handlers {
 		if utils.CheckInterface[services.TaskHandlerInt](handler) {
