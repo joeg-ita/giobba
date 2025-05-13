@@ -1,0 +1,26 @@
+name: giobba
+version: 0.1.0
+queues: ["default", "background"]
+workersNumber: 5
+lockDuration: 10
+jobsTimeoutRefresh: 60
+pollingTimeout: 1
+
+database:
+  url: 0.0.0.0
+  port: 27017
+  username: user
+  password: pass
+  db: giobba
+  tasksCollection: tasks
+  jobsCollection: jobs
+
+broker:
+  url: 0.0.0.0
+  port: 6379
+  username: user
+  password: pass
+  db: 0
+
+log:
+  level: info  # debug, info, warn, error 
