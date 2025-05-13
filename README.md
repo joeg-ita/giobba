@@ -22,11 +22,17 @@ Giobba uses a distributed architecture with the following components:
 - Configurable number of workers and queues
 - Task locking mechanism to prevent duplicate execution
 - Graceful shutdown support
-- Cron-style scheduling support
-- Task callbacks for success/failure notifications
+- Cron-style scheduling support with job management
+- Task callbacks for success/failure notifications (HTTP/HTTPS endpoints)
 - Task retry mechanism with configurable attempts
 - Task expiration support
 - Worker health monitoring and heartbeats
+- Comprehensive task validation
+- Job scheduling and management system
+- Configurable logging levels
+- Environment-based configuration
+- Polling timeout configuration
+- Database and broker authentication support
 
 ## Installation
 
@@ -50,15 +56,26 @@ queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 60
 jobsTimeoutRefresh: 300
+pollingTimeout: 1
 
 database:
   url: "mongodb://localhost:27017"
+  port: 27017
+  username: user
+  password: pass
   db: giobba
   tasksCollection: tasks
   jobsCollection: jobs
 
 broker:
   url: "redis://localhost:6379/0"
+  port: 6379
+  username: user
+  password: pass
+  db: 0
+
+log:
+  level: info  # debug, info, warn, error
 ```
 
 ### Environment Variables
@@ -79,7 +96,7 @@ You can override configuration values using environment variables:
 
 Tasks have several configurable properties:
 
-- `ID`: Unique identifier for the task
+- `ID`: Unique identifier for the task (UUID)
 - `Name`: Unique identifier for the task type
 - `Payload`: Map of data to be processed by the handler
 - `Queue`: Queue where the task will be processed
@@ -100,12 +117,24 @@ Tasks have several configurable properties:
 - `Result`: Task execution result
 - `Retries`: Number of retry attempts
 - `MaxRetries`: Maximum number of retry attempts
-- `Tags`: Custom tags for task categorization
 - `SchedulerID`: ID of the scheduler that processed the task
 - `WorkerID`: ID of the worker that executed the task
-- `ChildrenID`: IDs of child tasks
-- `Callback`: URL to call when task completes successfully
-- `CallbackErr`: URL to call when task fails
+- `Callback`: URL to call when task completes successfully (must be valid HTTP/HTTPS URL)
+- `CallbackErr`: URL to call when task fails (must be valid HTTP/HTTPS URL)
+
+### Job Properties
+
+Jobs have the following properties for managing scheduled tasks:
+
+- `ID`: Unique identifier for the job (UUID)
+- `LastExecution`: Timestamp of the last job execution
+- `NextExecution`: Timestamp of the next scheduled execution
+- `Schedule`: Cron expression for the job schedule
+- `TaskID`: ID of the associated task
+- `TaskQueue`: Queue where the task will be processed
+- `CreatedAt`: Job creation timestamp
+- `UpdatedAt`: Last update timestamp
+- `IsActive`: Whether the job is currently active
 
 ## Usage
 
