@@ -55,24 +55,17 @@ version: 0.1.0
 queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 60
-jobsTimeoutRefresh: 300
+jobsTimeoutRefresh: 30
 pollingTimeout: 1
 
 database:
   url: "mongodb://localhost:27017"
-  port: 27017
-  username: user
-  password: pass
   db: giobba
   tasksCollection: tasks
   jobsCollection: jobs
 
 broker:
   url: "redis://localhost:6379/0"
-  port: 6379
-  username: user
-  password: pass
-  db: 0
 
 log:
   level: info  # debug, info, warn, error
