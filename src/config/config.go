@@ -123,7 +123,7 @@ func ConfigFromYaml(filePath string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("ConfigFromYaml - Config Loaded!", config)
+	log.Printf("ConfigFromYaml - Config Loaded!")
 
 	return config, nil
 }

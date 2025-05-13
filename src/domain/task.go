@@ -60,6 +60,7 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 	if parentId == "" {
 		parentId = id
 	}
+	timestamp := time.Now()
 
 	task := Task{
 		ID:        id,
@@ -67,6 +68,7 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 		Payload:   payload,
 		Queue:     queue,
 		ETA:       eta,
+		CreatedAt: timestamp,
 		Priority:  priority,
 		StartMode: mode,
 		State:     PENDING,
@@ -83,6 +85,7 @@ func NewTask(name string, payload map[string]interface{}, queue string, eta time
 
 func NewScheduledTask(name string, payload map[string]interface{}, queue string, eta time.Time, schedule string, isScheduleActive bool, expiresAt time.Time, priority int) (Task, error) {
 	id := uuid.New().String()
+	timestamp := time.Now()
 
 	task := Task{
 		ID:               id,
@@ -90,6 +93,7 @@ func NewScheduledTask(name string, payload map[string]interface{}, queue string,
 		Payload:          payload,
 		Queue:            queue,
 		ETA:              eta,
+		CreatedAt:        timestamp,
 		ExpiresAt:        expiresAt,
 		Schedule:         schedule,
 		IsScheduleActive: isScheduleActive,
