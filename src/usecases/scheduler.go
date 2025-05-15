@@ -415,6 +415,8 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 	// Execute the task with context awareness
 	handler := s.Handlers[task.Name]
 
+	go s.renewLock(worker.context, task.ID, task.Queue)
+
 	// Create a channel for the task result
 	done := make(chan services.HandlerResult, 1)
 
@@ -505,6 +507,22 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 		}
 
 		return task, errorMsg
+	}
+}
+
+func (s *Scheduler) renewLock(ctx context.Context, taskId string, queue string) {
+	ticker := time.NewTicker(s.LockDuration / 2)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !s.brokerClient.RenewLock(ctx, taskId, queue, s.LockDuration) {
+				return
+			}
+		case <-s.context.Done():
+			return
+		}
 	}
 }
 

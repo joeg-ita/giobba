@@ -24,6 +24,8 @@ type BrokerInt interface {
 
 	Lock(taskId string, queue string, lockDuration time.Duration) bool
 
+	RenewLock(ctx context.Context, taskId string, queue string, lockDuration time.Duration) bool
+
 	UnLock(taskId string, queue string) error
 
 	Subscribe(context context.Context, channels ...string) interface{}
