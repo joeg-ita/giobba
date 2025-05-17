@@ -150,6 +150,20 @@ func (r *RedisBroker) Lock(taskId string, queue string, lockDuration time.Durati
 	return success
 }
 
+func (r *RedisBroker) RenewLock(ctx context.Context, taskId string, queue string, lockDuration time.Duration) bool {
+	lockKey := queue + "-LOCK-" + taskId
+	log.Printf("Renewing lock for task %s", taskId)
+
+	// Utilizziamo SETNX per provare ad impostare il lock
+	success, err := r.client.SetXX(context.Background(), lockKey, "1", lockDuration).Result()
+	if err != nil {
+		log.Printf("Errore nel rinnovo del lock per il task %s: %v", taskId, err)
+		return false
+	}
+
+	return success
+}
+
 func (r *RedisBroker) UnLock(taskId string, queue string) error {
 	lockKey := queue + "-LOCK-" + taskId
 	_, err := r.client.Del(context.Background(), lockKey).Result()

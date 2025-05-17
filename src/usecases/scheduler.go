@@ -415,6 +415,8 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 	// Execute the task with context awareness
 	handler := s.Handlers[task.Name]
 
+	go s.renewLock(worker.context, task.ID, task.Queue)
+
 	// Create a channel for the task result
 	done := make(chan services.HandlerResult, 1)
 
@@ -442,14 +444,44 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 			s.Mutex.Unlock()
 		} else {
 			log.Printf("task %s failed!", task.ID)
+
+			// Increment retry counter
+			task.Retries++
+
+			// Check if we should retry the task
+			if task.MaxRetries > 0 && task.Retries <= task.MaxRetries {
+				log.Printf("retrying task %s (attempt %d/%d)", task.ID, task.Retries, task.MaxRetries)
+
+				// Reset task state for retry
+				task.State = domain.PENDING
+				task.Error = result.Err.Error()
+				task.UpdatedAt = time.Now()
+
+				// Reschedule the task with a small delay
+				task.ETA = time.Now().Add(time.Second * time.Duration(task.Retries))
+
+				// Save and reschedule the task
+				s.brokerClient.SaveTask(task, task.Queue)
+				s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+
+				// Notify about retry
+				s.Tasker.Notify(context.Background(), task)
+
+				return task, nil
+			}
+
+			// Max retries reached or no retries configured
 			task.State = domain.FAILED
 			task.Error = result.Err.Error()
 			s.Mutex.Lock()
 			s.FailedExecutions++
 			s.Mutex.Unlock()
+
 			if task.CallbackErr != "" {
 				errMsg := map[string]interface{}{
-					"error": task.Error,
+					"error":      task.Error,
+					"retries":    task.Retries,
+					"maxRetries": task.MaxRetries,
 				}
 				go s.Tasker.Callback(task.CallbackErr, errMsg)
 			}
@@ -475,6 +507,22 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 		}
 
 		return task, errorMsg
+	}
+}
+
+func (s *Scheduler) renewLock(ctx context.Context, taskId string, queue string) {
+	ticker := time.NewTicker(s.LockDuration / 2)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !s.brokerClient.RenewLock(ctx, taskId, queue, s.LockDuration) {
+				return
+			}
+		case <-s.context.Done():
+			return
+		}
 	}
 }
 
