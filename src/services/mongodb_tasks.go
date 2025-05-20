@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/domain"
@@ -121,6 +122,34 @@ func (m *MongodbTasks) GetTasks(ctx context.Context, query string, skip int, lim
 	var tasks []domain.Task
 	if err = cursor.All(ctx, &tasks); err != nil {
 		return nil, fmt.Errorf("failed to decode tasks: %w", err)
+	}
+
+	return tasks, nil
+}
+
+func (m *MongodbTasks) GetStuckTasks(ctx context.Context, lockDuration time.Duration) ([]domain.Task, error) {
+	// Calculate the cutoff time for stuck tasks
+	cutoffTime := time.Now().Add(-lockDuration)
+
+	// Create filter to find RUNNING tasks that started before the cutoff time
+	filter := bson.M{
+		"state": domain.RUNNING,
+		"started_at": bson.M{
+			"$lt": cutoffTime,
+		},
+	}
+
+	// Execute find operation
+	cursor, err := m.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find stuck tasks: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Decode results into tasks slice
+	var tasks []domain.Task
+	if err = cursor.All(ctx, &tasks); err != nil {
+		return nil, fmt.Errorf("failed to decode stuck tasks: %w", err)
 	}
 
 	return tasks, nil

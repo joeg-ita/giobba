@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"sort"
 	"strconv"
@@ -37,28 +38,29 @@ type Worker struct {
 }
 
 type Scheduler struct {
-	Id                string
-	context           context.Context
-	brokerClient      services.BrokerInt
-	dbClient          services.DbTasksInt
-	dbJobsClient      services.DbJobsInt
-	restClient        services.RestInt
-	Tasker            Tasker
-	Queues            []string
-	Hostname          string
-	Handlers          map[string]services.TaskHandlerInt
-	MaxWorkers        int
-	Workers           map[string]*Worker
-	LockDuration      time.Duration
-	PollingTimeout    time.Duration
-	Mutex             sync.Mutex
-	FailedExecutions  int
-	SuccessExecutions int
-	shutdownChan      chan struct{}
-	shutdownWg        sync.WaitGroup
-	isShuttingDown    bool
-	shutdownTimeout   time.Duration
-	cleanupWg         sync.WaitGroup
+	Id                  string
+	context             context.Context
+	brokerClient        services.BrokerInt
+	dbClient            services.DbTasksInt
+	dbJobsClient        services.DbJobsInt
+	restClient          services.RestInt
+	Tasker              Tasker
+	Queues              []string
+	Hostname            string
+	Handlers            map[string]services.TaskHandlerInt
+	MaxWorkers          int
+	Workers             map[string]*Worker
+	LockDuration        time.Duration
+	PollingTimeout      time.Duration
+	Mutex               sync.Mutex
+	FailedExecutions    int
+	SuccessExecutions   int
+	shutdownChan        chan struct{}
+	shutdownWg          sync.WaitGroup
+	isShuttingDown      bool
+	shutdownTimeout     time.Duration
+	executionTimeCutOff time.Duration
+	cleanupWg           sync.WaitGroup
 }
 
 func NewScheduler(
@@ -90,24 +92,25 @@ func NewScheduler(
 	taskUtils := NewTaskUtils(brokerClient, dbTasksClient, dbJobsClient, httpService, time.Duration(cfg.LockDuration)*time.Second)
 
 	return Scheduler{
-		Id:                fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
-		context:           ctx,
-		Tasker:            *taskUtils,
-		brokerClient:      brokerClient,
-		dbClient:          dbTasksClient,
-		dbJobsClient:      dbJobsClient,
-		restClient:        httpService,
-		Hostname:          hostname,
-		Handlers:          make(map[string]services.TaskHandlerInt),
-		Queues:            cfg.Queues,
-		Workers:           workers,
-		MaxWorkers:        cfg.WorkersNumber,
-		LockDuration:      time.Duration(cfg.LockDuration) * time.Second,
-		PollingTimeout:    time.Duration(cfg.PollingTimeout) * time.Second,
-		FailedExecutions:  0,
-		SuccessExecutions: 0,
-		shutdownChan:      make(chan struct{}),
-		shutdownTimeout:   time.Duration(30) * time.Second,
+		Id:                  fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
+		context:             ctx,
+		Tasker:              *taskUtils,
+		brokerClient:        brokerClient,
+		dbClient:            dbTasksClient,
+		dbJobsClient:        dbJobsClient,
+		restClient:          httpService,
+		Hostname:            hostname,
+		Handlers:            make(map[string]services.TaskHandlerInt),
+		Queues:              cfg.Queues,
+		Workers:             workers,
+		MaxWorkers:          cfg.WorkersNumber,
+		LockDuration:        time.Duration(cfg.LockDuration) * time.Second,
+		PollingTimeout:      time.Duration(cfg.PollingTimeout) * time.Second,
+		FailedExecutions:    0,
+		SuccessExecutions:   0,
+		shutdownChan:        make(chan struct{}),
+		shutdownTimeout:     time.Duration(30) * time.Second,
+		executionTimeCutOff: time.Duration(cfg.ExecutionTimeCutOff) * time.Second,
 	}
 }
 
@@ -126,25 +129,53 @@ func (s *Scheduler) Start() {
 	go s.startCron(s.context)
 	go s.startPubSub(s.context)
 	go s.heartbeat(s.context)
+	go s.startRecoveryWorker()
 }
 
 func (s *Scheduler) startPubSub(ctx context.Context) {
 	log.Printf("subscribing channel %s", SERVICES_CHANNEL)
-	pubsub := (s.brokerClient.Subscribe(ctx, SERVICES_CHANNEL)).(*redis.PubSub)
+	pubsub := (s.brokerClient.Subscribe(ctx, SERVICES_CHANNEL, ACTIVITIES_CHANNEL, HEARTBEATS_CHANNEL)).(*redis.PubSub)
 	defer pubsub.Close()
 	ch := pubsub.Channel()
 
 	for msg := range ch {
 		log.Printf("message on channel [%v] payload=[%v]", msg.Channel, msg.Payload)
-		splitted := strings.Split(msg.Payload, ":")
-		if len(splitted) == 3 {
-			if strings.ToUpper(splitted[0]) == "KILL" {
-				task, _ := s.Tasker.brokerClient.GetTask(splitted[2], splitted[1])
-				s.Tasker.KillTask(ctx, s.Workers[task.WorkerID], splitted[2], splitted[1])
-			} else if strings.ToUpper(splitted[0]) == "REVOKE" {
-				s.Tasker.RevokeTask(splitted[2], splitted[1])
-			} else if strings.ToUpper(splitted[0]) == "AUTO" {
-				s.Tasker.AutoTask(splitted[2], splitted[1])
+		serviceMessage, err := domain.NewServiceMessageFromJsonString(msg.Payload)
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+		log.Println("serviceMessage", serviceMessage.Action)
+		log.Println("serviceMessage", serviceMessage.Payload)
+
+		switch strings.ToUpper(serviceMessage.Action) {
+		case "KILL":
+			taskId := (serviceMessage.Payload["taskId"]).(string)
+			queue := (serviceMessage.Payload["queue"]).(string)
+			task, _ := s.Tasker.brokerClient.GetTask(taskId, queue)
+			s.Tasker.KillTask(ctx, s.Workers[task.WorkerID], taskId, queue)
+		case "REVOKE":
+			taskId := (serviceMessage.Payload["taskId"]).(string)
+			queue := (serviceMessage.Payload["queue"]).(string)
+			s.Tasker.RevokeTask(taskId, queue)
+		case "AUTO":
+			taskId := (serviceMessage.Payload["taskId"]).(string)
+			queue := (serviceMessage.Payload["queue"]).(string)
+			s.Tasker.AutoTask(taskId, queue)
+		case "CHECK_TASK":
+			taskId := (serviceMessage.Payload["taskId"]).(string)
+			queue := (serviceMessage.Payload["queue"]).(string)
+			shedulerId := (serviceMessage.Payload["shedulerId"]).(string)
+			if shedulerId == s.Id {
+				workerId := (serviceMessage.Payload["workerId"]).(string)
+				if !s.isWorkerActive(workerId) {
+					// Resetta il task e lo mette rischedula se task
+					task, err := s.Tasker.Task(taskId, queue)
+					if err != nil {
+						return
+					}
+					s.handleStuckTask(task)
+				}
 			}
 		}
 	}
@@ -153,14 +184,19 @@ func (s *Scheduler) startPubSub(ctx context.Context) {
 func (s *Scheduler) heartbeat(context context.Context) {
 	for {
 		if time.Now().Unix()%HEARTBEAT_INTERVAL == 0 {
-			s.brokerClient.Publish(context, HEARTBEATS_CHANNEL, map[string]interface{}{
-				"id":           s.Id,
-				"queues":       s.Queues,
-				"workers":      s.MaxWorkers,
-				"hostname":     s.Hostname,
-				"successTasks": s.SuccessExecutions,
-				"failedTasks":  s.FailedExecutions,
-			})
+			serviceMessage := domain.ServiceMessage{
+				Action: "HEARTBEAT",
+				Payload: map[string]interface{}{
+					"id":           s.Id,
+					"queues":       s.Queues,
+					"workers":      s.MaxWorkers,
+					"workersIds":   strings.Join(utils.KeysIntoList(maps.Keys(s.Workers)), ","),
+					"hostname":     s.Hostname,
+					"successTasks": s.SuccessExecutions,
+					"failedTasks":  s.FailedExecutions,
+				},
+			}
+			s.brokerClient.Publish(context, HEARTBEATS_CHANNEL, serviceMessage)
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -612,4 +648,75 @@ func (s *Scheduler) Stop() {
 	}
 
 	log.Printf("Scheduler %s shutdown complete", s.Id)
+}
+
+// Aggiungere un meccanismo di recovery per i task bloccati
+func (s *Scheduler) startRecoveryWorker() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.recoverStuckTasks()
+		case <-s.context.Done():
+			return
+		}
+	}
+}
+
+func (s *Scheduler) recoverStuckTasks() {
+
+	stuckTasks, err := s.dbClient.GetStuckTasks(s.context, s.executionTimeCutOff)
+	if err != nil {
+		log.Printf("Error recovering stuck tasks: %v", err)
+		return
+	}
+
+	for _, task := range stuckTasks {
+		// Verifica se il worker è ancora attivo
+		if !s.isWorkerActive(task.WorkerID) {
+			// Resetta il task e lo mette rischedula se task
+			s.handleStuckTask(task)
+		} else {
+			// advertise to channel to check tasks execution for other active scheduler workers
+			ctx := context.Background()
+			s.brokerClient.Publish(ctx, SERVICES_CHANNEL, domain.ServiceMessage{
+				Action: "CHECK_TASK",
+				Payload: map[string]interface{}{
+					"taskId":     task.ID,
+					"queue":      task.Queue,
+					"shedulerId": task.SchedulerID,
+					"workerId":   task.WorkerID,
+				},
+			})
+		}
+	}
+}
+
+func (s *Scheduler) handleStuckTask(task domain.Task) {
+	s.brokerClient.UnLock(task.ID, task.Queue)
+
+	if s.brokerClient.Lock(task.ID, task.Queue, s.LockDuration) {
+		task.WorkerID = ""
+		if task.Retries < task.MaxRetries {
+			task.State = domain.PENDING
+			s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+		} else {
+			task.State = domain.FAILED
+		}
+		s.brokerClient.SaveTask(task, task.Queue)
+	}
+	s.brokerClient.UnLock(task.ID, task.Queue)
+}
+
+func (s *Scheduler) isWorkerActive(workerID string) bool {
+	// Check if the worker exists in our local workers map
+	if worker, exists := s.Workers[workerID]; exists {
+		worker.mutex.RLock()
+		defer worker.mutex.RUnlock()
+		return worker.processing
+	}
+
+	return false
 }

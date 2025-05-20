@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -38,16 +39,46 @@ type Log struct {
 }
 
 type Config struct {
-	Name               string   `yaml:"name"`
-	Version            string   `yaml:"version"`
-	Database           Database `yaml:"database"`
-	Broker             Broker   `yaml:"broker"`
-	Logger             Log      `yaml:"log"`
-	Queues             []string `yaml:"queues"`
-	WorkersNumber      int      `yaml:"workersNumber"`
-	LockDuration       int      `yaml:"lockDuration"`
-	JobsTimeoutRefresh int      `yaml:"jobsTimeoutRefresh"`
-	PollingTimeout     int      `yaml:"pollingTimeout"`
+	Name                string   `yaml:"name"`
+	Version             string   `yaml:"version"`
+	Database            Database `yaml:"database"`
+	Broker              Broker   `yaml:"broker"`
+	Logger              Log      `yaml:"log"`
+	Queues              []string `yaml:"queues"`
+	WorkersNumber       int      `yaml:"workersNumber"`
+	LockDuration        int      `yaml:"lockDuration"`
+	JobsTimeoutRefresh  int      `yaml:"jobsTimeoutRefresh"`
+	PollingTimeout      int      `yaml:"pollingTimeout"`
+	ExecutionTimeCutOff int      `yaml:"executionTimeCutOff"`
+}
+
+func (c *Config) Validate() error {
+	if c.Database.Url == "" {
+		return fmt.Errorf("database url is required")
+	}
+	if c.Broker.Url == "" {
+		return fmt.Errorf("broker url is required")
+	}
+	if len(c.Queues) == 0 {
+		return fmt.Errorf("at least a queue is required")
+	}
+	if c.WorkersNumber <= 0 {
+		return fmt.Errorf("at least a worker is required")
+	}
+	if c.LockDuration <= 10 {
+		return fmt.Errorf("LockDuration must be a value ge than 10 seconds")
+	}
+	if c.JobsTimeoutRefresh <= 10 {
+		return fmt.Errorf("JobsTimeoutRefresh must be a value ge than 10 seconds")
+	}
+	if c.PollingTimeout <= 1 {
+		return fmt.Errorf("LockDuration must be a value ge than 1 seconds")
+	}
+	if c.ExecutionTimeCutOff <= 30 {
+		return fmt.Errorf("ExecutionTimeCutOff must be a value gt than 30 seconds")
+	}
+
+	return nil
 }
 
 func LoadConfig() (*Config, error) {

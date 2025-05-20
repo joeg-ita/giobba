@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"github.com/joeg-ita/giobba/src/domain"
 )
@@ -12,6 +13,8 @@ type DbTasksInt interface {
 	GetTask(ctx context.Context, taskId string) (domain.Task, error)
 
 	GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Task, error)
+
+	GetStuckTasks(ctx context.Context, lockDuration time.Duration) ([]domain.Task, error)
 
 	Close(ctx context.Context)
 }

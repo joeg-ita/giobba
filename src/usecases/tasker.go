@@ -182,10 +182,18 @@ func (t *Tasker) Callback(url string, payload map[string]interface{}) {
 
 func (t *Tasker) Notify(ctx context.Context, task domain.Task) {
 
-	t.brokerClient.Publish(ctx, ACTIVITIES_CHANNEL, map[string]interface{}{
-		"workerId": task.WorkerID,
-		"task":     task,
-	})
+	serviceMessage := domain.ServiceMessage{
+		Action: "ACTIVITY",
+		Payload: map[string]interface{}{
+			"workerId": task.WorkerID,
+			"task":     task,
+		},
+	}
+
+	err := t.brokerClient.Publish(ctx, ACTIVITIES_CHANNEL, serviceMessage)
+	if err != nil {
+		log.Printf("error publishing task to broker %v", err)
+	}
 
 	if t.dbTasksClient == nil {
 		return

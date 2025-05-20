@@ -13,6 +13,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	HEARTBEATS_CHANNEL = "giobba-heartbeats"
+)
+
 type RedisBroker struct {
 	client *redis.Client
 }
@@ -181,11 +185,11 @@ func (r *RedisBroker) Subscribe(ctx context.Context, channels ...string) interfa
 	return r.client.Subscribe(ctx, channels...)
 }
 
-func (r *RedisBroker) Publish(ctx context.Context, channel string, payload map[string]interface{}) error {
-	message, err := json.Marshal(payload)
+func (r *RedisBroker) Publish(ctx context.Context, channel string, message domain.ServiceMessage) error {
+	msg, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
-	_, err = r.client.Publish(ctx, channel, message).Result()
+	_, err = r.client.Publish(ctx, channel, msg).Result()
 	return err
 }
