@@ -6,33 +6,60 @@
 
 Giobba uses a distributed architecture with the following components:
 
-- **Broker**: Handles task queuing and pub/sub communication (default: Redis)
-- **Database**: Stores task and job persistence (default: MongoDB)
+- **Broker**: Handles task queuing and pub/sub communication (Redis)
+  - Task queuing with priority support
+  - Pub/sub messaging for service communication
+  - Task locking mechanism
+  - Scheduled task management
+- **Database**: Stores task and job persistence (MongoDB)
+  - Task history and state tracking
+  - Job scheduling information
+  - Task recovery and monitoring
 - **Scheduler**: Manages task execution and worker coordination
+  - Worker pool management
+  - Task distribution
+  - Health monitoring
+  - Graceful shutdown
 - **Workers**: Execute tasks in parallel across multiple instances
+  - Concurrent task execution
+  - Task retry mechanism
+  - Context-aware execution
+  - Error handling
 
 ## Features
 
-- Distributed task execution with multiple workers
-- Task ETA scheduling with priorities (0-10)
-- Support for task dependencies (parent-child relationships)
-- Automatic and manual task execution modes
-- Task persistence in MongoDB
-- Redis-based task queue and pub/sub system
-- Configurable number of workers and queues
-- Task locking mechanism to prevent duplicate execution
-- Graceful shutdown support
-- Cron-style scheduling support with job management
-- Task callbacks for success/failure notifications (HTTP/HTTPS endpoints)
-- Task retry mechanism with configurable attempts
-- Task expiration support
-- Worker health monitoring and heartbeats
-- Comprehensive task validation
-- Job scheduling and management system
-- Configurable logging levels
-- Environment-based configuration
-- Polling timeout configuration
-- Database and broker authentication support
+- **Task Management**
+  - Distributed task execution with multiple workers
+  - Task ETA scheduling with priorities (0-10)
+  - Support for task dependencies (parent-child relationships)
+  - Automatic and manual task execution modes
+  - Task persistence in MongoDB
+  - Task locking mechanism to prevent duplicate execution
+  - Task retry mechanism with configurable attempts
+  - Task expiration support
+  - Task callbacks for success/failure notifications (HTTP/HTTPS endpoints)
+
+- **Scheduling**
+  - Cron-style scheduling support
+  - Job management system
+  - Configurable number of workers and queues
+  - Priority-based task execution
+  - ETA-based task scheduling
+
+- **Monitoring & Recovery**
+  - Worker health monitoring and heartbeats
+  - Task state tracking
+  - Stuck task detection and recovery
+  - Comprehensive task validation
+  - Service communication via pub/sub
+
+- **Infrastructure**
+  - Redis-based task queue and pub/sub system
+  - MongoDB for task and job persistence
+  - Configurable logging levels
+  - Environment-based configuration
+  - Database and broker authentication support
+  - Graceful shutdown support
 
 ## Installation
 
@@ -57,6 +84,7 @@ workersNumber: 5
 lockDuration: 60
 jobsTimeoutRefresh: 30
 pollingTimeout: 1
+executionTimeCutOff: 300  # Maximum execution time in seconds
 
 database:
   url: "mongodb://localhost:27017"
@@ -133,14 +161,14 @@ Jobs have the following properties for managing scheduled tasks:
 
 ### Creating Custom Task Handlers
 
-To create a custom task handler, embed the `BaseHandler` struct and implement the `Run` method:
+To create a custom task handler, implement the `TaskHandlerInt` interface:
 
 ```go
 type MyHandler struct {
-    BaseHandler
+    // Your custom fields here
 }
 
-func (m *MyHandler) Run(ctx context.Context, task domain.Task) error {
+func (m *MyHandler) Run(ctx context.Context, task domain.Task) services.HandlerResult {
     log.Printf("MyHandler processing task: %s", task.Name)
 
     // Access task payload
@@ -152,19 +180,25 @@ func (m *MyHandler) Run(ctx context.Context, task domain.Task) error {
     // Check for cancellation
     select {
     case <-ctx.Done():
-        return fmt.Errorf("task cancelled")
+        return services.HandlerResult{
+            Err: fmt.Errorf("task cancelled"),
+        }
     default:
         // Continue with work
     }
 
-    return nil
+    return services.HandlerResult{
+        Payload: map[string]interface{}{
+            "result": "success",
+        },
+    }
 }
 ```
 
 Register your handler before starting Giobba:
 
 ```go
-handler.Handlers["myHandler"] = &MyHandler{}
+scheduler.RegisterHandler("myHandler", &MyHandler{})
 ```
 
 ### Basic Example
@@ -183,108 +217,67 @@ import (
 
 func main() {
     // Add custom handler
-    handler.Handlers["myHandler"] = &MyHandler{}
+    scheduler.RegisterHandler("myHandler", &MyHandler{})
 
     // Start giobba
     go giobba.Giobba()
     
     // Create a task
-    payload := map[string]interface{}{
-        "user": "john",
-        "job":  "process_data",
+    task := domain.Task{
+        Name: "myHandler",
+        Payload: map[string]interface{}{
+            "user": "john",
+            "job":  "process_data",
+        },
+        Queue: "default",
+        Priority: 5,
+        StartMode: domain.AUTO,
+        ETA: time.Now().Add(5 * time.Minute),
+        MaxRetries: 3,
+        Callback: "https://api.example.com/callback",
+        CallbackErr: "https://api.example.com/error",
     }
     
-    // Create a task with:
-    // - name: "myHandler"
-    // - payload: custom data
-    // - queue: "default"
-    // - execution time: now
-    // - priority: 5
-    // - start mode: AUTO
-    // - parent ID: "" (no parent)
-    task, _ := domain.NewTask("myHandler", payload, "default", time.Now(), 5, domain.AUTO, "")
+    // Add the task
+    taskID, err := tasker.AddTask(task)
+    if err != nil {
+        log.Fatalf("Failed to add task: %v", err)
+    }
     
-    // Add task to the scheduler
-    scheduler.Tasks.AddTask(task)
+    log.Printf("Task added with ID: %s", taskID)
 }
 ```
 
-### Task Creation Helpers
+### Task States and Transitions
 
-The package provides several helper functions to create tasks with different configurations:
+Tasks can be in one of the following states:
+- `PENDING`: Task is waiting to be executed
+- `RUNNING`: Task is currently being executed
+- `COMPLETED`: Task has completed successfully
+- `FAILED`: Task has failed after all retry attempts
+- `REVOKED`: Task has been manually revoked
+- `KILLED`: Task has been forcefully terminated
 
-#### Basic Task
-```go
-task, err := handlers.NewDefaultTask(
-    "my-task",
-    map[string]interface{}{
-        "key": "value",
-    },
-    "my-queue",
-)
-```
+### Task Operations
 
-#### Child Task
-```go
-task, err := handlers.NewChildTask(
-    "child-task",
-    map[string]interface{}{
-        "key": "value",
-    },
-    "my-queue",
-    parentTaskId,
-)
-```
+The following operations are available for tasks:
+- `AddTask`: Create and schedule a new task
+- `KillTask`: Forcefully terminate a running task
+- `RevokeTask`: Cancel a pending task
+- `AutoTask`: Set a task to auto-execution mode
+- `TaskState`: Get the current state of a task
 
-#### Manual Task
-```go
-task, err := handlers.NewManualTask(
-    "manual-task",
-    map[string]interface{}{
-        "key": "value",
-    },
-    "my-queue",
-)
-```
+### Service Communication
 
-#### High Priority Task
-```go
-task, err := handlers.NewHighPriorityTask(
-    "high-priority-task",
-    map[string]interface{}{
-        "key": "value",
-    },
-    "my-queue",
-)
-```
+Giobba uses Redis pub/sub for service communication with the following channels:
+- `giobba-services`: General service communication
+- `giobba-heartbeats`: Worker health monitoring
+- `giobba-activities`: Task activity notifications
 
-#### Scheduled Task
-```go
-task, err := handlers.NewScheduledTask(
-    "scheduled-task",
-    map[string]interface{}{
-        "key": "value",
-    },
-    "my-queue",
-    time.Now().Add(1 * time.Hour),
-)
-```
+## Contributing
 
-## Best Practices
-
-1. Always check for context cancellation in long-running tasks
-2. Use appropriate task priorities based on importance
-3. Implement proper error handling and logging
-4. Use callbacks for task completion notifications
-5. Consider using child tasks and manual triggering for complex workflows
-6. Set appropriate ETA values and priorities for scheduled tasks
-7. Use task tags for better organization and filtering
-8. Implement proper error handling in task callbacks
-9. Monitor worker health through heartbeats
-10. Use task expiration for cleanup of old tasks
-11. Configure appropriate retry policies for failed tasks
-12. Use task locking to prevent duplicate execution
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
