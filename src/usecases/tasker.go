@@ -115,6 +115,7 @@ func (t *Tasker) RevokeTask(taskID string, queue string) error {
 		}
 		task.State = domain.REVOKED
 		_, err = t.brokerClient.SaveTask(task, queue)
+		t.brokerClient.UnSchedule(taskID, queue)
 		t.brokerClient.UnLock(taskID, queue)
 
 		if err != nil {
