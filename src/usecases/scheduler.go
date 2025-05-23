@@ -353,7 +353,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		task, err := s.brokerClient.GetTask(taskID, taskQueue)
 		if err == redis.Nil {
 			// Il task non esiste più, lo rimuoviamo dalla coda di scheduling
-			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue)
+			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue, false)
 			continue
 		} else if err != nil {
 			log.Printf("error fetching task %s from queue %s: %v", taskID, taskQueue, err)
@@ -375,7 +375,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		// Verifichiamo se il task è stato cancellato
 		if task.State == domain.REVOKED || task.State == domain.KILLED {
 			// Il task revoked, lo rimuoviamo dalla coda di scheduling
-			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue)
+			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue, false)
 			continue
 		}
 
@@ -409,7 +409,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 			task.StartedAt = time.Now()
 			task.SchedulerID = s.Id
 			s.brokerClient.SaveTask(task, taskQueue)
-			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue)
+			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue, false)
 
 			s.Tasker.Notify(context.Background(), task)
 

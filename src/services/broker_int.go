@@ -18,7 +18,7 @@ type BrokerInt interface {
 
 	Schedule(task domain.Task, queue string) error
 
-	UnSchedule(taskId string, queue string) error
+	UnSchedule(taskId string, queue string, withWildcards bool) error
 
 	GetScheduled(queue string) ([]string, error)
 

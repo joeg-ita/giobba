@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/joeg-ita/giobba/src/domain"
@@ -93,8 +94,27 @@ func (r *RedisBroker) GetTask(taskId string, queue string) (domain.Task, error) 
 	return task, nil
 }
 
-func (r *RedisBroker) UnSchedule(taskId string, queue string) error {
-	_, err := r.client.ZRem(context.Background(), queue, taskId).Result()
+func (r *RedisBroker) UnSchedule(taskId string, queue string, withWildcards bool) error {
+	log.Printf("unschedule taskId %v with queue %v", taskId, queue)
+
+	key := taskId
+
+	if withWildcards {
+		scanResult, _, err := r.client.ZScan(context.Background(), queue, 0, taskId, 10).Result()
+
+		if err != nil {
+			return err
+		}
+		if len(scanResult) == 0 {
+			return fmt.Errorf("unschedule of taskId %v with queue %v using wildcards fail", taskId, queue)
+		}
+		if len(scanResult) > 2 {
+			return fmt.Errorf("unschedule of taskId %v with queue %v using wildcards found to many results", taskId, queue)
+		}
+		key = strings.Split(scanResult[0], " ")[0]
+	}
+
+	_, err := r.client.ZRem(context.Background(), queue, key).Result()
 	if err != nil {
 		return err
 	}
