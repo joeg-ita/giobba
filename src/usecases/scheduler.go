@@ -148,21 +148,21 @@ func (s *Scheduler) startPubSub(ctx context.Context) {
 		log.Println("serviceMessage", serviceMessage.Action)
 		log.Println("serviceMessage", serviceMessage.Payload)
 
-		switch strings.ToUpper(serviceMessage.Action) {
-		case "KILL":
+		switch serviceMessage.Action {
+		case domain.KILL:
 			taskId := (serviceMessage.Payload["taskId"]).(string)
 			queue := (serviceMessage.Payload["queue"]).(string)
 			task, _ := s.Tasker.brokerClient.GetTask(taskId, queue)
 			s.Tasker.KillTask(ctx, s.Workers[task.WorkerID], taskId, queue)
-		case "REVOKE":
+		case domain.REVOKE:
 			taskId := (serviceMessage.Payload["taskId"]).(string)
 			queue := (serviceMessage.Payload["queue"]).(string)
 			s.Tasker.RevokeTask(taskId, queue)
-		case "AUTO":
+		case domain.AUTO_TASK:
 			taskId := (serviceMessage.Payload["taskId"]).(string)
 			queue := (serviceMessage.Payload["queue"]).(string)
 			s.Tasker.AutoTask(taskId, queue)
-		case "CHECK_TASK":
+		case domain.CHECK_TASK:
 			taskId := (serviceMessage.Payload["taskId"]).(string)
 			queue := (serviceMessage.Payload["queue"]).(string)
 			shedulerId := (serviceMessage.Payload["shedulerId"]).(string)

@@ -184,7 +184,7 @@ func (t *Tasker) Callback(url string, payload map[string]interface{}) {
 func (t *Tasker) Notify(ctx context.Context, task domain.Task) {
 
 	serviceMessage := domain.ServiceMessage{
-		Action: "ACTIVITY",
+		Action: domain.ACTIVITY,
 		Payload: map[string]interface{}{
 			"workerId": task.WorkerID,
 			"task":     task,

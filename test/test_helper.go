@@ -14,6 +14,7 @@ import (
 
 // Scheduler is the shared scheduler instance for all tests
 var Scheduler usecases.Scheduler
+var BrokerClient services.BrokerInt
 
 var (
 	mongodbClient services.DbClient[*mongo.Client]
@@ -26,11 +27,11 @@ func SetupTest() {
 	setupOnce.Do(func() {
 		fmt.Println("Setting up test environment...")
 		cfg, _ = config.ConfigFromYaml("giobba.yaml")
-		brokerClient := services.NewRedisBrokerByUrl(cfg.Broker.Url)
+		BrokerClient = services.NewRedisBrokerByUrl(cfg.Broker.Url)
 		mongodbClient, _ = services.NewMongodbClient(cfg.Database)
 		mongodbTasks, _ := services.NewMongodbTasks(mongodbClient, cfg.Database)
 		mongodbJobs, _ := services.NewMongodbJobs(mongodbClient, cfg.Database)
-		Scheduler = usecases.NewScheduler(context.Background(), brokerClient, mongodbTasks, mongodbJobs, cfg)
+		Scheduler = usecases.NewScheduler(context.Background(), BrokerClient, mongodbTasks, mongodbJobs, cfg)
 		go giobba.Giobba()
 	})
 }
