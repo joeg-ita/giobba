@@ -25,5 +25,5 @@ jobs:
       run: go build -v ./...
 
     - name: Test
-      run: go test ./test/entities
+      run: go test ./test/domain
       # run: go test $(go list ./test/... | grep -v local)

@@ -89,7 +89,7 @@ func NewScheduler(
 
 	httpService := services.NewHttpRest()
 
-	taskUtils := NewTaskUtils(brokerClient, dbTasksClient, dbJobsClient, httpService, time.Duration(cfg.LockDuration)*time.Second)
+	taskUtils := NewTaskUtils(ctx, brokerClient, dbTasksClient, dbJobsClient, httpService, time.Duration(cfg.LockDuration)*time.Second)
 
 	return Scheduler{
 		Id:                  fmt.Sprintf("sched-%v-%s", hostname, schedulerUuid[:8]),
@@ -152,7 +152,7 @@ func (s *Scheduler) startPubSub(ctx context.Context) {
 		case domain.KILL:
 			taskId := (serviceMessage.Payload["taskId"]).(string)
 			queue := (serviceMessage.Payload["queue"]).(string)
-			task, _ := s.Tasker.brokerClient.GetTask(taskId, queue)
+			task, _ := s.Tasker.brokerClient.GetTask(s.context, taskId, queue)
 			s.Tasker.KillTask(ctx, s.Workers[task.WorkerID], taskId, queue)
 		case domain.REVOKE:
 			taskId := (serviceMessage.Payload["taskId"]).(string)
@@ -277,7 +277,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 				job := jobs[i]
 				taskId := job.TaskID
 				queue := job.TaskQueue
-				if s.brokerClient.Lock(taskId, queue, s.LockDuration) {
+				if s.brokerClient.Lock(s.context, taskId, queue, s.LockDuration) {
 					log.Printf("retrieving scheduled task %v", taskId)
 					task, err := s.Tasker.Task(taskId, queue)
 					if err != nil {
@@ -291,11 +291,11 @@ func (s *Scheduler) startCron(ctx context.Context) {
 						if job.LastExecution.After(nextExecution) {
 							task.ETA = nextExecution
 							task.State = domain.PENDING
-							_, err := s.brokerClient.SaveTask(task, task.Queue)
+							_, err := s.brokerClient.SaveTask(s.context, task, task.Queue)
 							if err != nil {
 								log.Printf("unable to update task %v", task.ID)
 							}
-							err = s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+							err = s.brokerClient.Schedule(s.context, task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
 							if err != nil {
 								log.Printf("unable to schedule task %v on queue %v", task.ID, task.Queue)
 							}
@@ -309,7 +309,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 						log.Printf("job update %v", job)
 						s.Tasker.dbJobsClient.Save(ctx, job)
 					}
-					s.brokerClient.UnLock(taskId, queue)
+					s.brokerClient.UnLock(s.context, taskId, queue)
 				}
 			}
 		}
@@ -324,7 +324,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 	queues := s.Queues
 
 	for _, queue := range queues {
-		scheduled, err := s.brokerClient.GetScheduled(queue + QUEUE_SCHEDULE_POSTFIX)
+		scheduled, err := s.brokerClient.GetScheduled(s.context, queue+QUEUE_SCHEDULE_POSTFIX)
 		if err != nil {
 			return err
 		}
@@ -350,10 +350,10 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		taskID := string(item[0])
 		taskScheduledQueue := string(item[1])
 		taskQueue := strings.TrimSuffix(taskScheduledQueue, QUEUE_SCHEDULE_POSTFIX)
-		task, err := s.brokerClient.GetTask(taskID, taskQueue)
+		task, err := s.brokerClient.GetTask(s.context, taskID, taskQueue)
 		if err == redis.Nil {
 			// Il task non esiste più, lo rimuoviamo dalla coda di scheduling
-			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue, false)
+			s.brokerClient.UnSchedule(s.context, schedTaskItem, taskScheduledQueue, false)
 			continue
 		} else if err != nil {
 			log.Printf("error fetching task %s from queue %s: %v", taskID, taskQueue, err)
@@ -375,7 +375,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		// Verifichiamo se il task è stato cancellato
 		if task.State == domain.REVOKED || task.State == domain.KILLED {
 			// Il task revoked, lo rimuoviamo dalla coda di scheduling
-			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue, false)
+			s.brokerClient.UnSchedule(s.context, schedTaskItem, taskScheduledQueue, false)
 			continue
 		}
 
@@ -387,7 +387,7 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		// Verifichiamo se il task è in attesa di attivazione manuale
 		if task.StartMode == domain.AUTO && task.ParentID != task.ID {
 			// Se non è in modalità auto-attivazione e ha un parent, verifichiamo lo stato del parent
-			parentTask, err := s.brokerClient.GetTask(task.ParentID, taskQueue)
+			parentTask, err := s.brokerClient.GetTask(s.context, task.ParentID, taskQueue)
 			if err == redis.Nil {
 				// Il parent non esiste, passiamo al prossimo task
 				continue
@@ -403,13 +403,13 @@ func (s *Scheduler) fetchAndProcessTask(worker *Worker) error {
 		}
 
 		// Proviamo ad acquisire il lock per il task
-		if s.brokerClient.Lock(taskID, taskQueue, s.LockDuration) {
+		if s.brokerClient.Lock(s.context, taskID, taskQueue, s.LockDuration) {
 			task.WorkerID = worker.Id
 			task.State = domain.RUNNING
 			task.StartedAt = time.Now()
 			task.SchedulerID = s.Id
-			s.brokerClient.SaveTask(task, taskQueue)
-			s.brokerClient.UnSchedule(schedTaskItem, taskScheduledQueue, false)
+			s.brokerClient.SaveTask(s.context, task, taskQueue)
+			s.brokerClient.UnSchedule(s.context, schedTaskItem, taskScheduledQueue, false)
 
 			s.Tasker.Notify(context.Background(), task)
 
@@ -497,8 +497,8 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 				task.ETA = time.Now().Add(time.Second * time.Duration(task.Retries))
 
 				// Save and reschedule the task
-				s.brokerClient.SaveTask(task, task.Queue)
-				s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+				s.brokerClient.SaveTask(s.context, task, task.Queue)
+				s.brokerClient.Schedule(s.context, task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
 
 				// Notify about retry
 				s.Tasker.Notify(context.Background(), task)
@@ -522,8 +522,8 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 				go s.Tasker.Callback(task.CallbackErr, errMsg)
 			}
 		}
-		s.brokerClient.SaveTask(task, task.Queue)
-		s.brokerClient.UnLock(task.ID, task.Queue)
+		s.brokerClient.SaveTask(s.context, task, task.Queue)
+		s.brokerClient.UnLock(s.context, task.ID, task.Queue)
 
 		return task, result.Err
 	case <-worker.context.Done():
@@ -533,8 +533,8 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 		task.State = domain.KILLED
 		task.CompletedAt = time.Now()
 		task.Error = errorMsg.Error()
-		s.brokerClient.SaveTask(task, task.Queue)
-		s.brokerClient.UnLock(task.ID, task.Queue)
+		s.brokerClient.SaveTask(s.context, task, task.Queue)
+		s.brokerClient.UnLock(s.context, task.ID, task.Queue)
 		if task.CallbackErr != "" {
 			errMsg := map[string]interface{}{
 				"error": task.Error,
@@ -682,7 +682,7 @@ func (s *Scheduler) recoverStuckTasks() {
 			// advertise to channel to check tasks execution for other active scheduler workers
 			ctx := context.Background()
 			s.brokerClient.Publish(ctx, SERVICES_CHANNEL, domain.ServiceMessage{
-				Action: "CHECK_TASK",
+				Action: domain.CHECK_TASK,
 				Payload: map[string]interface{}{
 					"taskId":     task.ID,
 					"queue":      task.Queue,
@@ -695,19 +695,19 @@ func (s *Scheduler) recoverStuckTasks() {
 }
 
 func (s *Scheduler) handleStuckTask(task domain.Task) {
-	s.brokerClient.UnLock(task.ID, task.Queue)
+	s.brokerClient.UnLock(s.context, task.ID, task.Queue)
 
-	if s.brokerClient.Lock(task.ID, task.Queue, s.LockDuration) {
+	if s.brokerClient.Lock(s.context, task.ID, task.Queue, s.LockDuration) {
 		task.WorkerID = ""
 		if task.Retries < task.MaxRetries {
 			task.State = domain.PENDING
-			s.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+			s.brokerClient.Schedule(s.context, task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
 		} else {
 			task.State = domain.FAILED
 		}
-		s.brokerClient.SaveTask(task, task.Queue)
+		s.brokerClient.SaveTask(s.context, task, task.Queue)
 	}
-	s.brokerClient.UnLock(task.ID, task.Queue)
+	s.brokerClient.UnLock(s.context, task.ID, task.Queue)
 }
 
 func (s *Scheduler) isWorkerActive(workerID string) bool {

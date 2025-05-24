@@ -11,6 +11,7 @@ import (
 )
 
 type Tasker struct {
+	context       context.Context
 	brokerClient  services.BrokerInt
 	dbTasksClient services.DbTasksInt
 	dbJobsClient  services.DbJobsInt
@@ -18,8 +19,9 @@ type Tasker struct {
 	LockDuration  time.Duration
 }
 
-func NewTaskUtils(brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, restClient services.RestInt, lockDuration time.Duration) *Tasker {
+func NewTaskUtils(context context.Context, brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, restClient services.RestInt, lockDuration time.Duration) *Tasker {
 	return &Tasker{
+		context:       context,
 		brokerClient:  brokerClient,
 		dbTasksClient: dbTasksClient,
 		dbJobsClient:  dbJobsClient,
@@ -50,11 +52,11 @@ func (t *Tasker) AddTask(task domain.Task) (string, error) {
 		task.JobID = job.ID
 	}
 
-	taskId, err := t.brokerClient.AddTask(task, task.Queue)
+	taskId, err := t.brokerClient.AddTask(t.context, task, task.Queue)
 	if err != nil {
 		return "", err
 	}
-	err = t.brokerClient.Schedule(task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
+	err = t.brokerClient.Schedule(t.context, task, task.Queue+QUEUE_SCHEDULE_POSTFIX)
 	if err != nil {
 		return "", err
 	}
@@ -70,7 +72,7 @@ func (t *Tasker) AddJob(job domain.Job) error {
 // Update KillTask to properly handle cancellation
 func (t *Tasker) KillTask(ctx context.Context, worker *Worker, taskID string, queue string) error {
 	log.Printf("killing task %v", taskID)
-	task, err := t.brokerClient.GetTask(taskID, queue)
+	task, err := t.brokerClient.GetTask(t.context, taskID, queue)
 	if err != nil {
 		return fmt.Errorf("failed to find task %s: %v", taskID, err)
 	}
@@ -102,9 +104,9 @@ func (t *Tasker) KillTask(ctx context.Context, worker *Worker, taskID string, qu
 
 func (t *Tasker) RevokeTask(taskID string, queue string) error {
 
-	if t.brokerClient.Lock(taskID, queue, t.LockDuration) {
+	if t.brokerClient.Lock(t.context, taskID, queue, t.LockDuration) {
 		log.Printf("revoking task %v", taskID)
-		task, err := t.brokerClient.GetTask(taskID, queue)
+		task, err := t.brokerClient.GetTask(t.context, taskID, queue)
 		if err != nil {
 			return fmt.Errorf("failed to find task %s: %v", taskID, err)
 		}
@@ -114,9 +116,9 @@ func (t *Tasker) RevokeTask(taskID string, queue string) error {
 			return nil
 		}
 		task.State = domain.REVOKED
-		_, err = t.brokerClient.SaveTask(task, queue)
-		t.brokerClient.UnSchedule(fmt.Sprintf("%v::%v::*", task.ID, task.Queue+QUEUE_SCHEDULE_POSTFIX), task.Queue+QUEUE_SCHEDULE_POSTFIX, true)
-		t.brokerClient.UnLock(task.ID, task.Queue)
+		_, err = t.brokerClient.SaveTask(t.context, task, queue)
+		t.brokerClient.UnSchedule(t.context, fmt.Sprintf("%v::%v::*", task.ID, task.Queue+QUEUE_SCHEDULE_POSTFIX), task.Queue+QUEUE_SCHEDULE_POSTFIX, true)
+		t.brokerClient.UnLock(t.context, task.ID, task.Queue)
 
 		if err != nil {
 			return err
@@ -130,9 +132,9 @@ func (t *Tasker) RevokeTask(taskID string, queue string) error {
 
 func (t *Tasker) AutoTask(taskID string, queue string) error {
 
-	if t.brokerClient.Lock(taskID, queue, t.LockDuration) {
+	if t.brokerClient.Lock(t.context, taskID, queue, t.LockDuration) {
 		log.Printf("setting task %v to auto run", taskID)
-		task, err := t.brokerClient.GetTask(taskID, queue)
+		task, err := t.brokerClient.GetTask(t.context, taskID, queue)
 		if err != nil {
 			return fmt.Errorf("failed to find task %s: %v", taskID, err)
 		}
@@ -142,8 +144,8 @@ func (t *Tasker) AutoTask(taskID string, queue string) error {
 			return nil
 		}
 		task.StartMode = domain.AUTO
-		_, err = t.brokerClient.SaveTask(task, queue)
-		t.brokerClient.UnLock(taskID, queue)
+		_, err = t.brokerClient.SaveTask(t.context, task, queue)
+		t.brokerClient.UnLock(t.context, taskID, queue)
 
 		if err != nil {
 			return err
@@ -166,7 +168,7 @@ func (t *Tasker) TaskState(taskID string, queue string) (domain.TaskState, error
 
 func (t *Tasker) Task(taskID string, queue string) (domain.Task, error) {
 
-	task, err := t.brokerClient.GetTask(taskID, queue)
+	task, err := t.brokerClient.GetTask(t.context, taskID, queue)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("failed to find task %s: %v", taskID, err)
 	}

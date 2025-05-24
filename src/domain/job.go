@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,8 +23,17 @@ type Job struct {
 func NewJob(schedule string, taskId string, taskQueue string, from time.Time, lastExecution time.Time, isActive bool) (Job, error) {
 	id := uuid.New().String()
 
+	if schedule == "" {
+		return Job{}, fmt.Errorf("schedule is required")
+	}
+
+	err := utils.ParseCronSchedule(schedule)
+	if err != nil {
+		return Job{}, err
+	}
+
 	var nextExecution time.Time
-	if isActive {
+	if isActive && !from.IsZero() {
 		nextExecution = utils.CalculateNextExecution(schedule, from)
 	}
 
@@ -38,7 +48,7 @@ func NewJob(schedule string, taskId string, taskQueue string, from time.Time, la
 		IsActive:      isActive,
 	}
 
-	err := job.Validate()
+	err = job.Validate()
 	if err != nil {
 		return Job{}, err
 	}
@@ -47,5 +57,20 @@ func NewJob(schedule string, taskId string, taskQueue string, from time.Time, la
 }
 
 func (j *Job) Validate() error {
+	if j.ID == "" {
+		return fmt.Errorf("schedule ID is required")
+	}
+	if j.Schedule == "" {
+		return fmt.Errorf("schedule is required")
+	}
+	if j.TaskID == "" {
+		return fmt.Errorf("task_id is required")
+	}
+	if j.TaskQueue == "" {
+		return fmt.Errorf("task_queue is required")
+	}
+	if j.IsActive && j.NextExecution.IsZero() {
+		return fmt.Errorf("next_execution is required for active jobs")
+	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joeg-ita/giobba/src/config"
 	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
@@ -16,7 +17,7 @@ func setupTestDB() (*services.MongodbTasks, func()) {
 	// Use a test database configuration
 	cfg := config.Database{
 		Url:             "mongodb://localhost:27017",
-		DB:              "test_db",
+		DB:              "test_giobba",
 		TasksCollection: "test_tasks",
 	}
 
@@ -26,7 +27,7 @@ func setupTestDB() (*services.MongodbTasks, func()) {
 
 	// Cleanup function to drop the test collection and close the connection
 	cleanup := func() {
-		collection := mongodbClient.GetClient().Database(cfg.DB).Collection(cfg.JobsCollection)
+		collection := mongodbClient.GetClient().Database(cfg.DB).Collection(cfg.TasksCollection)
 		collection.Drop(ctx)
 		mongodbClient.Close(ctx)
 	}
@@ -41,8 +42,9 @@ func TestSaveTask(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("should save new task", func(t *testing.T) {
+		taskID := uuid.New().String()
 		task := domain.Task{
-			ID:        "test-task-1",
+			ID:        taskID,
 			Name:      "Test Task",
 			Queue:     "test-queue",
 			State:     domain.PENDING,
@@ -69,8 +71,9 @@ func TestSaveTask(t *testing.T) {
 	})
 
 	t.Run("should update existing task", func(t *testing.T) {
+		taskID := uuid.New().String()
 		task := domain.Task{
-			ID:        "test-task-2",
+			ID:        taskID,
 			Name:      "Original Task",
 			Queue:     "test-queue",
 			State:     domain.PENDING,
@@ -118,14 +121,16 @@ func TestGetTask(t *testing.T) {
 	})
 
 	t.Run("should return error for non-existent task", func(t *testing.T) {
-		_, err := db.GetTask(ctx, "non-existent-id")
+		nonExistentID := uuid.New().String()
+		_, err := db.GetTask(ctx, nonExistentID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "task not found")
 	})
 
 	t.Run("should return task when it exists", func(t *testing.T) {
+		taskID := uuid.New().String()
 		task := domain.Task{
-			ID:        "test-task-3",
+			ID:        taskID,
 			Name:      "Test Task",
 			Queue:     "test-queue",
 			State:     domain.PENDING,
@@ -160,7 +165,7 @@ func TestGetTasks(t *testing.T) {
 	// Create test tasks
 	tasks := []domain.Task{
 		{
-			ID:        "task-1",
+			ID:        uuid.New().String(),
 			Name:      "First Task",
 			Queue:     "test-queue",
 			State:     domain.PENDING,
@@ -174,7 +179,7 @@ func TestGetTasks(t *testing.T) {
 			UpdatedAt: time.Now(),
 		},
 		{
-			ID:        "task-2",
+			ID:        uuid.New().String(),
 			Name:      "Second Task",
 			Queue:     "test-queue",
 			State:     domain.PENDING,
@@ -188,7 +193,7 @@ func TestGetTasks(t *testing.T) {
 			UpdatedAt: time.Now(),
 		},
 		{
-			ID:        "task-3",
+			ID:        uuid.New().String(),
 			Name:      "Third Task",
 			Queue:     "test-queue",
 			State:     domain.PENDING,

@@ -1,4 +1,4 @@
-package test
+package usecases
 
 import (
 	"context"
@@ -10,36 +10,38 @@ import (
 	"github.com/joeg-ita/giobba/src/usecases"
 )
 
-func TestTaskKill(t *testing.T) {
+func TestTaskRevoke(t *testing.T) {
 	SetupTest()
 	defer TeardownTest()
 
-	fmt.Println("TestTaskKill...")
+	fmt.Println("TestTaskRevoke...")
 
-	now := time.Now()
-	queue := "default"
+	now := time.Now().Add(2 * time.Minute)
+	queue := "background"
 	payload := map[string]interface{}{
 		"user": "sub_a",
-		"job":  "process_killable",
+		"job":  "process_subA",
 	}
-	task_to_kill, _ := domain.NewTask("process", payload, queue, now, 9, domain.AUTO, "")
-	task_to_killed_p9, _ := Scheduler.Tasker.AddTask(task_to_kill)
+	task_to_revoke, _ := domain.NewTask("process", payload, queue, now, 9, domain.AUTO, "")
+	task_to_revoke_p9, _ := Scheduler.Tasker.AddTask(task_to_revoke)
 
-	tasks := []string{task_to_killed_p9}
+	tasks := []string{task_to_revoke_p9}
 	result := make(map[string]domain.Task)
 
 	for {
 		for _, tid := range tasks {
 			task, _ := Scheduler.Tasker.Task(tid, queue)
-			if task.State == domain.KILLED {
+			if task.State == domain.REVOKED {
 				result[tid] = task
 			} else {
-				t.Logf("Task not yet Killed")
+				t.Logf("Task not yet Revoked")
 			}
-
-			if time.Now().Add(5*time.Second).After(task.CreatedAt) && task.State == domain.RUNNING {
+			if time.Now().After(now) {
+				t.Errorf("Revoking error")
+			}
+			if time.Now().Add(30 * time.Second).After(task.CreatedAt) {
 				message := domain.ServiceMessage{
-					Action: domain.KILL,
+					Action: domain.REVOKE,
 					Payload: map[string]interface{}{
 						"taskId":     task.ID,
 						"queue":      task.Queue,
@@ -49,7 +51,7 @@ func TestTaskKill(t *testing.T) {
 				}
 				err := BrokerClient.Publish(context.Background(), usecases.SERVICES_CHANNEL, message)
 				if err != nil {
-					t.Errorf("KillTask error %v", err)
+					t.Errorf("RevokeTask error %v", err)
 				}
 			}
 			time.Sleep(2 * time.Second)
