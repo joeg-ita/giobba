@@ -190,6 +190,25 @@ func (t *Task) Validate() error {
 	return nil
 }
 
+// Add proper state transition validation
+func (t *Task) ValidateStateTransition(newState TaskState) error {
+	validTransitions := map[TaskState][]TaskState{
+		PENDING:   {RUNNING, REVOKED},
+		RUNNING:   {COMPLETED, FAILED, KILLED},
+		COMPLETED: {PENDING}, // Only for scheduled tasks
+		FAILED:    {PENDING}, // Only for retries
+	}
+
+	if transitions, ok := validTransitions[t.State]; ok {
+		for _, validState := range transitions {
+			if newState == validState {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("invalid state transition from %s to %s", t.State, newState)
+}
+
 func isValidURL(str string) bool {
 	if str == "" {
 		return true // Empty URL is considered valid (optional URL)

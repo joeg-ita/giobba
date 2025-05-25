@@ -49,6 +49,7 @@ type Scheduler struct {
 	Hostname            string
 	Handlers            map[string]services.TaskHandlerInt
 	MaxWorkers          int
+	workersMutex        sync.RWMutex
 	Workers             map[string]*Worker
 	LockDuration        time.Duration
 	PollingTimeout      time.Duration
@@ -556,6 +557,8 @@ func (s *Scheduler) renewLock(ctx context.Context, taskId string, queue string) 
 			if !s.brokerClient.RenewLock(ctx, taskId, queue, s.LockDuration) {
 				return
 			}
+		case <-ctx.Done():
+			return
 		case <-s.context.Done():
 			return
 		}
@@ -712,6 +715,8 @@ func (s *Scheduler) handleStuckTask(task domain.Task) {
 
 func (s *Scheduler) isWorkerActive(workerID string) bool {
 	// Check if the worker exists in our local workers map
+	s.workersMutex.RLock()
+	defer s.workersMutex.RUnlock()
 	if worker, exists := s.Workers[workerID]; exists {
 		worker.mutex.RLock()
 		defer worker.mutex.RUnlock()
