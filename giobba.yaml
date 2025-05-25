@@ -1,5 +1,5 @@
 name: giobba
-version: 0.1.0
+version: 0.2.0
 queues: ["default", "background"]
 workersNumber: 5
 lockDuration: 10
