@@ -13,12 +13,12 @@ import (
 )
 
 type MongodbTasks struct {
-	client     DbClient[*mongo.Client]
+	client     domain.DbClient[*mongo.Client]
 	cfg        config.Database
 	collection *mongo.Collection
 }
 
-func NewMongodbTasks(dbClient DbClient[*mongo.Client], cfg config.Database) (*MongodbTasks, error) {
+func NewMongodbTasks(dbClient domain.DbClient[*mongo.Client], cfg config.Database) (*MongodbTasks, error) {
 	collection := dbClient.GetClient().Database(cfg.DB).Collection(cfg.TasksCollection)
 
 	return &MongodbTasks{

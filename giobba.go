@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/joeg-ita/giobba/src/config"
+	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/handlers"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/joeg-ita/giobba/src/usecases"
@@ -50,7 +51,7 @@ func Giobba() {
 		cfg)
 
 	for name, handler := range handlers.Handlers {
-		if utils.CheckInterface[services.TaskHandlerInt](handler) {
+		if utils.CheckInterface[domain.TaskHandlerInt](handler) {
 			scheduler.RegisterHandler(name, handler)
 		}
 	}

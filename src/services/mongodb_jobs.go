@@ -13,12 +13,12 @@ import (
 )
 
 type MongodbJobs struct {
-	client     DbClient[*mongo.Client]
+	client     domain.DbClient[*mongo.Client]
 	cfg        config.Database
 	collection *mongo.Collection
 }
 
-func NewMongodbJobs(dbClient DbClient[*mongo.Client], cfg config.Database) (*MongodbJobs, error) {
+func NewMongodbJobs(dbClient domain.DbClient[*mongo.Client], cfg config.Database) (*MongodbJobs, error) {
 
 	collection := dbClient.GetClient().Database(cfg.DB).Collection(cfg.JobsCollection)
 

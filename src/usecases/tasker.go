@@ -7,19 +7,18 @@ import (
 	"time"
 
 	"github.com/joeg-ita/giobba/src/domain"
-	"github.com/joeg-ita/giobba/src/services"
 )
 
 type Tasker struct {
 	context       context.Context
-	brokerClient  services.BrokerInt
-	dbTasksClient services.DbTasksInt
-	dbJobsClient  services.DbJobsInt
-	restClient    services.RestInt
+	brokerClient  domain.BrokerInt
+	dbTasksClient domain.DbTasksInt
+	dbJobsClient  domain.DbJobsInt
+	restClient    domain.RestInt
 	LockDuration  time.Duration
 }
 
-func NewTaskUtils(context context.Context, brokerClient services.BrokerInt, dbTasksClient services.DbTasksInt, dbJobsClient services.DbJobsInt, restClient services.RestInt, lockDuration time.Duration) *Tasker {
+func NewTaskUtils(context context.Context, brokerClient domain.BrokerInt, dbTasksClient domain.DbTasksInt, dbJobsClient domain.DbJobsInt, restClient domain.RestInt, lockDuration time.Duration) *Tasker {
 	return &Tasker{
 		context:       context,
 		brokerClient:  brokerClient,

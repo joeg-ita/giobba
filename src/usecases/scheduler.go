@@ -40,14 +40,14 @@ type Worker struct {
 type Scheduler struct {
 	Id                  string
 	context             context.Context
-	brokerClient        services.BrokerInt
-	dbClient            services.DbTasksInt
-	dbJobsClient        services.DbJobsInt
-	restClient          services.RestInt
+	brokerClient        domain.BrokerInt
+	dbClient            domain.DbTasksInt
+	dbJobsClient        domain.DbJobsInt
+	restClient          domain.RestInt
 	Tasker              Tasker
 	Queues              []string
 	Hostname            string
-	Handlers            map[string]services.TaskHandlerInt
+	Handlers            map[string]domain.TaskHandlerInt
 	MaxWorkers          int
 	workersMutex        sync.RWMutex
 	Workers             map[string]*Worker
@@ -66,9 +66,9 @@ type Scheduler struct {
 
 func NewScheduler(
 	ctx context.Context,
-	brokerClient services.BrokerInt,
-	dbTasksClient services.DbTasksInt,
-	dbJobsClient services.DbJobsInt,
+	brokerClient domain.BrokerInt,
+	dbTasksClient domain.DbTasksInt,
+	dbJobsClient domain.DbJobsInt,
 	cfg *config.Config) Scheduler {
 
 	hostname, _ := os.Hostname()
@@ -101,7 +101,7 @@ func NewScheduler(
 		dbJobsClient:        dbJobsClient,
 		restClient:          httpService,
 		Hostname:            hostname,
-		Handlers:            make(map[string]services.TaskHandlerInt),
+		Handlers:            make(map[string]domain.TaskHandlerInt),
 		Queues:              cfg.Queues,
 		Workers:             workers,
 		MaxWorkers:          cfg.WorkersNumber,
@@ -116,7 +116,7 @@ func NewScheduler(
 }
 
 // RegisterHandler registra un handler per un tipo di task
-func (s *Scheduler) RegisterHandler(taskName string, handler services.TaskHandlerInt) {
+func (s *Scheduler) RegisterHandler(taskName string, handler domain.TaskHandlerInt) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	s.Handlers[taskName] = handler
@@ -455,7 +455,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 	go s.renewLock(worker.context, task.ID, task.Queue)
 
 	// Create a channel for the task result
-	done := make(chan services.HandlerResult, 1)
+	done := make(chan domain.HandlerResult, 1)
 
 	// Start the task in a goroutine
 	go func() {

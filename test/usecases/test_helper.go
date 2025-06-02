@@ -7,6 +7,7 @@ import (
 
 	"github.com/joeg-ita/giobba"
 	"github.com/joeg-ita/giobba/src/config"
+	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/joeg-ita/giobba/src/usecases"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -14,10 +15,10 @@ import (
 
 // Scheduler is the shared scheduler instance for all tests
 var Scheduler usecases.Scheduler
-var BrokerClient services.BrokerInt
+var BrokerClient domain.BrokerInt
 
 var (
-	mongodbClient services.DbClient[*mongo.Client]
+	mongodbClient domain.DbClient[*mongo.Client]
 	cfg           *config.Config
 	setupOnce     sync.Once
 )
