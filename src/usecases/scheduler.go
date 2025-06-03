@@ -41,8 +41,8 @@ type Scheduler struct {
 	Id                  string
 	context             context.Context
 	brokerClient        domain.BrokerInt
-	dbClient            domain.DbTasksInt
-	dbJobsClient        domain.DbJobsInt
+	taskRepository      domain.TaskRepositoryInt
+	JobRepository       domain.JobRepositoryInt
 	restClient          domain.RestInt
 	Tasker              Tasker
 	Queues              []string
@@ -67,8 +67,8 @@ type Scheduler struct {
 func NewScheduler(
 	ctx context.Context,
 	brokerClient domain.BrokerInt,
-	dbTasksClient domain.DbTasksInt,
-	dbJobsClient domain.DbJobsInt,
+	dbTasksClient domain.TaskRepositoryInt,
+	dbJobsClient domain.JobRepositoryInt,
 	cfg *config.Config) Scheduler {
 
 	hostname, _ := os.Hostname()
@@ -97,8 +97,8 @@ func NewScheduler(
 		context:             ctx,
 		Tasker:              *taskUtils,
 		brokerClient:        brokerClient,
-		dbClient:            dbTasksClient,
-		dbJobsClient:        dbJobsClient,
+		taskRepository:      dbTasksClient,
+		JobRepository:       dbJobsClient,
 		restClient:          httpService,
 		Hostname:            hostname,
 		Handlers:            make(map[string]domain.TaskHandlerInt),
@@ -269,7 +269,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 			return
 		default:
 			log.Printf("cron fetching tasks")
-			jobs, err := s.Tasker.dbJobsClient.RetrieveMany(ctx, "", 0, 100, nil)
+			jobs, err := s.Tasker.jobRepository.List(ctx, "", 0, 100, nil)
 			log.Printf("retrieved %d scheduled tasks", len(jobs))
 			if err != nil {
 				log.Println(err.Error())
@@ -284,7 +284,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 					if err != nil {
 						log.Println(err.Error())
 						job.IsActive = false
-						s.Tasker.dbJobsClient.Save(ctx, job)
+						s.Tasker.jobRepository.Update(ctx, job)
 						continue
 					}
 					if task.State == domain.COMPLETED {
@@ -308,7 +308,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 							log.Printf("task schedule expired for task %v", task.ID)
 						}
 						log.Printf("job update %v", job)
-						s.Tasker.dbJobsClient.Save(ctx, job)
+						s.Tasker.jobRepository.Update(ctx, job)
 					}
 					s.brokerClient.UnLock(s.context, taskId, queue)
 				}
@@ -624,7 +624,7 @@ func (s *Scheduler) Stop() {
 	go func() {
 		defer s.cleanupWg.Done()
 		log.Printf("Cleaning up MongoDB tasks client...")
-		s.dbClient.Close(shutdownCtx)
+		s.taskRepository.Close(shutdownCtx)
 		log.Printf("MongoDB tasks client cleanup completed")
 	}()
 
@@ -632,7 +632,7 @@ func (s *Scheduler) Stop() {
 	go func() {
 		defer s.cleanupWg.Done()
 		log.Printf("Cleaning up MongoDB jobs client...")
-		s.dbJobsClient.Close(shutdownCtx)
+		s.JobRepository.Close(shutdownCtx)
 		log.Printf("MongoDB jobs client cleanup completed")
 	}()
 
@@ -670,7 +670,7 @@ func (s *Scheduler) startRecoveryWorker() {
 
 func (s *Scheduler) recoverStuckTasks() {
 
-	stuckTasks, err := s.dbClient.GetStuckTasks(s.context, s.executionTimeCutOff)
+	stuckTasks, err := s.taskRepository.GetStuckTasks(s.context, s.executionTimeCutOff)
 	if err != nil {
 		log.Printf("Error recovering stuck tasks: %v", err)
 		return

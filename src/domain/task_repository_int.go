@@ -5,8 +5,10 @@ import (
 	"time"
 )
 
-type DbTasksInt interface {
-	SaveTask(ctx context.Context, task Task) (string, error)
+type TaskRepositoryInt interface {
+	Create(ctx context.Context, task Task) (string, error)
+
+	Update(ctx context.Context, task Task) (string, error)
 
 	GetTask(ctx context.Context, taskId string) (Task, error)
 

@@ -10,22 +10,22 @@ import (
 )
 
 type Tasker struct {
-	context       context.Context
-	brokerClient  domain.BrokerInt
-	dbTasksClient domain.DbTasksInt
-	dbJobsClient  domain.DbJobsInt
-	restClient    domain.RestInt
-	LockDuration  time.Duration
+	context        context.Context
+	brokerClient   domain.BrokerInt
+	taskRepository domain.TaskRepositoryInt
+	jobRepository  domain.JobRepositoryInt
+	restClient     domain.RestInt
+	LockDuration   time.Duration
 }
 
-func NewTaskUtils(context context.Context, brokerClient domain.BrokerInt, dbTasksClient domain.DbTasksInt, dbJobsClient domain.DbJobsInt, restClient domain.RestInt, lockDuration time.Duration) *Tasker {
+func NewTaskUtils(context context.Context, brokerClient domain.BrokerInt, dbTasksClient domain.TaskRepositoryInt, dbJobsClient domain.JobRepositoryInt, restClient domain.RestInt, lockDuration time.Duration) *Tasker {
 	return &Tasker{
-		context:       context,
-		brokerClient:  brokerClient,
-		dbTasksClient: dbTasksClient,
-		dbJobsClient:  dbJobsClient,
-		restClient:    restClient,
-		LockDuration:  lockDuration,
+		context:        context,
+		brokerClient:   brokerClient,
+		taskRepository: dbTasksClient,
+		jobRepository:  dbJobsClient,
+		restClient:     restClient,
+		LockDuration:   lockDuration,
 	}
 }
 
@@ -64,7 +64,7 @@ func (t *Tasker) AddTask(task domain.Task) (string, error) {
 }
 
 func (t *Tasker) AddJob(job domain.Job) error {
-	_, err := t.dbJobsClient.Save(context.Background(), job)
+	_, err := t.jobRepository.Create(context.Background(), job)
 	return err
 }
 
@@ -197,10 +197,10 @@ func (t *Tasker) Notify(ctx context.Context, task domain.Task) {
 		log.Printf("error publishing task to broker %v", err)
 	}
 
-	if t.dbTasksClient == nil {
+	if t.taskRepository == nil {
 		return
 	} else {
-		_, err := t.dbTasksClient.SaveTask(ctx, task)
+		_, err := t.taskRepository.Update(ctx, task)
 		if err != nil {
 			log.Printf("error sending task to database")
 		}

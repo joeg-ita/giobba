@@ -32,11 +32,11 @@ func Giobba() {
 	if err != nil {
 		log.Panic("unable to load database client")
 	}
-	mongodbJobs, err := services.NewMongodbJobs(mongodbClient, cfg.Database)
+	mongodbJobs, err := services.NewMongoJobRepository(mongodbClient, cfg.Database)
 	if err != nil {
 		log.Panic("unable to load jobs implementation")
 	}
-	mongodbTasks, err := services.NewMongodbTasks(mongodbClient, cfg.Database)
+	mongodbTasks, err := services.NewMongoTaskRepository(mongodbClient, cfg.Database)
 	if err != nil {
 		log.Panic("unable to load tasks implementation")
 	}

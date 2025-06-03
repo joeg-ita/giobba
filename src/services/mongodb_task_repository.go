@@ -12,23 +12,47 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-type MongodbTasks struct {
+type MongoTaskRepository struct {
 	client     domain.DbClient[*mongo.Client]
 	cfg        config.Database
 	collection *mongo.Collection
 }
 
-func NewMongodbTasks(dbClient domain.DbClient[*mongo.Client], cfg config.Database) (*MongodbTasks, error) {
+func NewMongoTaskRepository(dbClient domain.DbClient[*mongo.Client], cfg config.Database) (*MongoTaskRepository, error) {
 	collection := dbClient.GetClient().Database(cfg.DB).Collection(cfg.TasksCollection)
 
-	return &MongodbTasks{
+	return &MongoTaskRepository{
 		client:     dbClient,
 		cfg:        cfg,
 		collection: collection,
 	}, nil
 }
 
-func (m *MongodbTasks) SaveTask(ctx context.Context, task domain.Task) (string, error) {
+func (m *MongoTaskRepository) Create(ctx context.Context, task domain.Task) (string, error) {
+
+	// Convert task to BSON document
+	taskDoc, err := bson.Marshal(task)
+	if err != nil {
+		return "", err
+	}
+	var taskMap bson.M
+	if err := bson.Unmarshal(taskDoc, &taskMap); err != nil {
+		return "", err
+	}
+
+	// Ensure _id is set correctly
+	taskMap["_id"] = task.ID
+	delete(taskMap, "id") // Remove the "id" field if it exists
+
+	_, err = m.collection.InsertOne(ctx, taskMap)
+	if err != nil {
+		return "", err
+	}
+
+	return task.ID, nil
+}
+
+func (m *MongoTaskRepository) Update(ctx context.Context, task domain.Task) (string, error) {
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: task.ID}}
 
@@ -66,7 +90,7 @@ func (m *MongodbTasks) SaveTask(ctx context.Context, task domain.Task) (string, 
 	return task.ID, nil
 }
 
-func (m *MongodbTasks) GetTask(ctx context.Context, taskId string) (domain.Task, error) {
+func (m *MongoTaskRepository) GetTask(ctx context.Context, taskId string) (domain.Task, error) {
 	if taskId == "" {
 		return domain.Task{}, fmt.Errorf("task ID cannot be empty")
 	}
@@ -87,7 +111,7 @@ func (m *MongodbTasks) GetTask(ctx context.Context, taskId string) (domain.Task,
 	return task, nil
 }
 
-func (m *MongodbTasks) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Task, error) {
+func (m *MongoTaskRepository) GetTasks(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Task, error) {
 
 	// Create filter based on query string
 	var filter bson.M
@@ -127,7 +151,7 @@ func (m *MongodbTasks) GetTasks(ctx context.Context, query string, skip int, lim
 	return tasks, nil
 }
 
-func (m *MongodbTasks) GetStuckTasks(ctx context.Context, lockDuration time.Duration) ([]domain.Task, error) {
+func (m *MongoTaskRepository) GetStuckTasks(ctx context.Context, lockDuration time.Duration) ([]domain.Task, error) {
 	// Calculate the cutoff time for stuck tasks
 	cutoffTime := time.Now().Add(-lockDuration)
 
@@ -155,7 +179,7 @@ func (m *MongodbTasks) GetStuckTasks(ctx context.Context, lockDuration time.Dura
 	return tasks, nil
 }
 
-func (m *MongodbTasks) Close(ctx context.Context) {
+func (m *MongoTaskRepository) Close(ctx context.Context) {
 	if m.client != nil {
 		m.client.Close(ctx)
 	}

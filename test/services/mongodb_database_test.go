@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB() (*services.MongodbTasks, func()) {
+func setupTestDB() (*services.MongoTaskRepository, func()) {
 	// Use a test database configuration
 	cfg := config.Database{
 		Url:             "mongodb://localhost:27017",
@@ -22,7 +22,7 @@ func setupTestDB() (*services.MongodbTasks, func()) {
 	}
 
 	mongodbClient, _ := services.NewMongodbClient(cfg)
-	db, _ := services.NewMongodbTasks(mongodbClient, cfg)
+	db, _ := services.NewMongoTaskRepository(mongodbClient, cfg)
 	ctx := context.Background()
 
 	// Cleanup function to drop the test collection and close the connection
@@ -58,7 +58,7 @@ func TestSaveTask(t *testing.T) {
 			UpdatedAt: time.Now(),
 		}
 
-		id, err := db.SaveTask(ctx, task)
+		id, err := db.Create(ctx, task)
 		require.NoError(t, err)
 		assert.Equal(t, task.ID, id)
 		// Verify task was saved
@@ -88,7 +88,7 @@ func TestSaveTask(t *testing.T) {
 		}
 
 		// Save initial task
-		_, err := db.SaveTask(ctx, task)
+		_, err := db.Create(ctx, task)
 		require.NoError(t, err)
 
 		// Update task
@@ -96,7 +96,7 @@ func TestSaveTask(t *testing.T) {
 		task.State = domain.RUNNING
 		task.UpdatedAt = time.Now()
 
-		id, err := db.SaveTask(ctx, task)
+		id, err := db.Update(ctx, task)
 		require.NoError(t, err)
 		assert.Equal(t, task.ID, id)
 
@@ -144,7 +144,7 @@ func TestGetTask(t *testing.T) {
 			UpdatedAt: time.Now(),
 		}
 
-		_, err := db.SaveTask(ctx, task)
+		_, err := db.Create(ctx, task)
 		require.NoError(t, err)
 
 		savedTask, err := db.GetTask(ctx, task.ID)
@@ -210,7 +210,7 @@ func TestGetTasks(t *testing.T) {
 
 	// Save all tasks
 	for _, task := range tasks {
-		_, err := db.SaveTask(ctx, task)
+		_, err := db.Create(ctx, task)
 		require.NoError(t, err)
 	}
 
