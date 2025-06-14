@@ -7,15 +7,14 @@ import (
 	"time"
 
 	"github.com/joeg-ita/giobba/src/domain"
-	"github.com/joeg-ita/giobba/src/services"
 )
 
 // BaseHandler provides a base implementation that users can embed in their custom handlers
 type BaseHandler struct{}
 
 // Run is the base implementation that users can override
-func (h *BaseHandler) Run(ctx context.Context, task domain.Task) services.HandlerResult {
-	result := services.HandlerResult{
+func (h *BaseHandler) Run(ctx context.Context, task domain.Task) domain.HandlerResult {
+	result := domain.HandlerResult{
 		Payload: nil,
 		Err:     fmt.Errorf("Run method must be implemented by custom handler"),
 	}
@@ -98,14 +97,14 @@ type Process struct {
 	BaseHandler
 }
 
-func (t *Process) Run(ctx context.Context, task domain.Task) services.HandlerResult {
+func (t *Process) Run(ctx context.Context, task domain.Task) domain.HandlerResult {
 	log.Printf("Processing task: %s", task.Name)
 	for i := 0; i < 5; i++ {
 		// Check for cancellation during the inner loop
 		select {
 		case <-ctx.Done():
 			log.Println("Inner loop cancelled!")
-			result := services.HandlerResult{
+			result := domain.HandlerResult{
 				Payload: nil,
 				Err:     fmt.Errorf("task %v execution cancelled", task.ID),
 			}
@@ -120,7 +119,7 @@ func (t *Process) Run(ctx context.Context, task domain.Task) services.HandlerRes
 		time.Sleep(time.Duration(500) * time.Millisecond)
 	}
 
-	result := services.HandlerResult{
+	result := domain.HandlerResult{
 		Payload: map[string]interface{}{
 			"taskId": task.ID,
 			"rc":     0,
@@ -131,6 +130,6 @@ func (t *Process) Run(ctx context.Context, task domain.Task) services.HandlerRes
 }
 
 // Register all handlers
-var Handlers = map[string]services.TaskHandlerInt{
+var Handlers = map[string]domain.TaskHandlerInt{
 	"process": &Process{},
 }

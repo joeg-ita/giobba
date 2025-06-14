@@ -61,10 +61,42 @@ Giobba uses a distributed architecture with the following components:
   - Database and broker authentication support
   - Graceful shutdown support
 
+## Requirements
+
+- Go 1.23.3 or later
+- Redis 6.0 or later
+- MongoDB 4.4 or later
+
 ## Installation
 
+1. Clone the repository:
 ```bash
-go get github.com/joeg-ita/giobba
+git clone https://github.com/joeg-ita/giobba.git
+cd giobba
+```
+
+2. Install dependencies:
+```bash
+go mod download
+```
+
+3. Build the project:
+```bash
+go build
+```
+
+## Project Structure
+
+```
+giobba/
+├── .github/           # GitHub workflows and templates
+├── src/              # Source code
+├── test/             # Test files and examples
+├── giobba.go         # Main entry point
+├── giobba.yaml       # Default configuration
+├── go.mod            # Go module definition
+├── go.sum            # Go module checksums
+└── README.md         # This file
 ```
 
 ## Configuration
@@ -248,36 +280,28 @@ func main() {
 }
 ```
 
-### Task States and Transitions
+## Development
 
-Tasks can be in one of the following states:
-- `PENDING`: Task is waiting to be executed
-- `RUNNING`: Task is currently being executed
-- `COMPLETED`: Task has completed successfully
-- `FAILED`: Task has failed after all retry attempts
-- `REVOKED`: Task has been manually revoked
-- `KILLED`: Task has been forcefully terminated
+### Running Tests
 
-### Task Operations
+```bash
+go test ./...
+```
 
-The following operations are available for tasks:
-- `AddTask`: Create and schedule a new task
-- `KillTask`: Forcefully terminate a running task
-- `RevokeTask`: Cancel a pending task
-- `AutoTask`: Set a task to auto-execution mode
-- `TaskState`: Get the current state of a task
+### Running Linters
 
-### Service Communication
-
-Giobba uses Redis pub/sub for service communication with the following channels:
-- `giobba-services`: General service communication
-- `giobba-heartbeats`: Worker health monitoring
-- `giobba-activities`: Task activity notifications
+```bash
+go vet ./...
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

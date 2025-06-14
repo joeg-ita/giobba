@@ -40,15 +40,16 @@ type Worker struct {
 type Scheduler struct {
 	Id                  string
 	context             context.Context
-	brokerClient        services.BrokerInt
-	dbClient            services.DbTasksInt
-	dbJobsClient        services.DbJobsInt
-	restClient          services.RestInt
+	brokerClient        domain.BrokerInt
+	taskRepository      domain.TaskRepositoryInt
+	JobRepository       domain.JobRepositoryInt
+	restClient          domain.RestInt
 	Tasker              Tasker
 	Queues              []string
 	Hostname            string
-	Handlers            map[string]services.TaskHandlerInt
+	Handlers            map[string]domain.TaskHandlerInt
 	MaxWorkers          int
+	workersMutex        sync.RWMutex
 	Workers             map[string]*Worker
 	LockDuration        time.Duration
 	PollingTimeout      time.Duration
@@ -65,9 +66,9 @@ type Scheduler struct {
 
 func NewScheduler(
 	ctx context.Context,
-	brokerClient services.BrokerInt,
-	dbTasksClient services.DbTasksInt,
-	dbJobsClient services.DbJobsInt,
+	brokerClient domain.BrokerInt,
+	dbTasksClient domain.TaskRepositoryInt,
+	dbJobsClient domain.JobRepositoryInt,
 	cfg *config.Config) Scheduler {
 
 	hostname, _ := os.Hostname()
@@ -96,11 +97,11 @@ func NewScheduler(
 		context:             ctx,
 		Tasker:              *taskUtils,
 		brokerClient:        brokerClient,
-		dbClient:            dbTasksClient,
-		dbJobsClient:        dbJobsClient,
+		taskRepository:      dbTasksClient,
+		JobRepository:       dbJobsClient,
 		restClient:          httpService,
 		Hostname:            hostname,
-		Handlers:            make(map[string]services.TaskHandlerInt),
+		Handlers:            make(map[string]domain.TaskHandlerInt),
 		Queues:              cfg.Queues,
 		Workers:             workers,
 		MaxWorkers:          cfg.WorkersNumber,
@@ -115,7 +116,7 @@ func NewScheduler(
 }
 
 // RegisterHandler registra un handler per un tipo di task
-func (s *Scheduler) RegisterHandler(taskName string, handler services.TaskHandlerInt) {
+func (s *Scheduler) RegisterHandler(taskName string, handler domain.TaskHandlerInt) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	s.Handlers[taskName] = handler
@@ -268,7 +269,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 			return
 		default:
 			log.Printf("cron fetching tasks")
-			jobs, err := s.Tasker.dbJobsClient.RetrieveMany(ctx, "", 0, 100, nil)
+			jobs, err := s.Tasker.jobRepository.List(ctx, "", 0, 100, nil)
 			log.Printf("retrieved %d scheduled tasks", len(jobs))
 			if err != nil {
 				log.Println(err.Error())
@@ -283,7 +284,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 					if err != nil {
 						log.Println(err.Error())
 						job.IsActive = false
-						s.Tasker.dbJobsClient.Save(ctx, job)
+						s.Tasker.jobRepository.Update(ctx, job)
 						continue
 					}
 					if task.State == domain.COMPLETED {
@@ -307,7 +308,7 @@ func (s *Scheduler) startCron(ctx context.Context) {
 							log.Printf("task schedule expired for task %v", task.ID)
 						}
 						log.Printf("job update %v", job)
-						s.Tasker.dbJobsClient.Save(ctx, job)
+						s.Tasker.jobRepository.Update(ctx, job)
 					}
 					s.brokerClient.UnLock(s.context, taskId, queue)
 				}
@@ -454,7 +455,7 @@ func (s *Scheduler) executeTask(worker *Worker, task domain.Task) (domain.Task, 
 	go s.renewLock(worker.context, task.ID, task.Queue)
 
 	// Create a channel for the task result
-	done := make(chan services.HandlerResult, 1)
+	done := make(chan domain.HandlerResult, 1)
 
 	// Start the task in a goroutine
 	go func() {
@@ -556,6 +557,8 @@ func (s *Scheduler) renewLock(ctx context.Context, taskId string, queue string) 
 			if !s.brokerClient.RenewLock(ctx, taskId, queue, s.LockDuration) {
 				return
 			}
+		case <-ctx.Done():
+			return
 		case <-s.context.Done():
 			return
 		}
@@ -621,7 +624,7 @@ func (s *Scheduler) Stop() {
 	go func() {
 		defer s.cleanupWg.Done()
 		log.Printf("Cleaning up MongoDB tasks client...")
-		s.dbClient.Close(shutdownCtx)
+		s.taskRepository.Close(shutdownCtx)
 		log.Printf("MongoDB tasks client cleanup completed")
 	}()
 
@@ -629,7 +632,7 @@ func (s *Scheduler) Stop() {
 	go func() {
 		defer s.cleanupWg.Done()
 		log.Printf("Cleaning up MongoDB jobs client...")
-		s.dbJobsClient.Close(shutdownCtx)
+		s.JobRepository.Close(shutdownCtx)
 		log.Printf("MongoDB jobs client cleanup completed")
 	}()
 
@@ -667,7 +670,7 @@ func (s *Scheduler) startRecoveryWorker() {
 
 func (s *Scheduler) recoverStuckTasks() {
 
-	stuckTasks, err := s.dbClient.GetStuckTasks(s.context, s.executionTimeCutOff)
+	stuckTasks, err := s.taskRepository.GetStuckTasks(s.context, s.executionTimeCutOff)
 	if err != nil {
 		log.Printf("Error recovering stuck tasks: %v", err)
 		return
@@ -712,6 +715,8 @@ func (s *Scheduler) handleStuckTask(task domain.Task) {
 
 func (s *Scheduler) isWorkerActive(workerID string) bool {
 	// Check if the worker exists in our local workers map
+	s.workersMutex.RLock()
+	defer s.workersMutex.RUnlock()
 	if worker, exists := s.Workers[workerID]; exists {
 		worker.mutex.RLock()
 		defer worker.mutex.RUnlock()

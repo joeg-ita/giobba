@@ -12,24 +12,45 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-type MongodbJobs struct {
-	client     DbClient[*mongo.Client]
+type MongoJobRepository struct {
+	client     domain.DbClient[*mongo.Client]
 	cfg        config.Database
 	collection *mongo.Collection
 }
 
-func NewMongodbJobs(dbClient DbClient[*mongo.Client], cfg config.Database) (*MongodbJobs, error) {
+func NewMongoJobRepository(dbClient domain.DbClient[*mongo.Client], cfg config.Database) (*MongoJobRepository, error) {
 
 	collection := dbClient.GetClient().Database(cfg.DB).Collection(cfg.JobsCollection)
 
-	return &MongodbJobs{
+	return &MongoJobRepository{
 		client:     dbClient,
 		cfg:        cfg,
 		collection: collection,
 	}, nil
 }
 
-func (m *MongodbJobs) Save(ctx context.Context, job domain.Job) (string, error) {
+func (m *MongoJobRepository) Create(ctx context.Context, job domain.Job) (string, error) {
+	jobDoc, err := bson.Marshal(job)
+	if err != nil {
+		return "", err
+	}
+	var jobMap bson.M
+	if err := bson.Unmarshal(jobDoc, &jobMap); err != nil {
+		return "", err
+	}
+
+	// Ensure _id is set correctly
+	jobMap["_id"] = job.ID
+	delete(jobMap, "id") // Remove the "id" field if it exists
+
+	_, err = m.collection.InsertOne(ctx, jobMap)
+	if err != nil {
+		return "", err
+	}
+	return job.ID, nil
+}
+
+func (m *MongoJobRepository) Update(ctx context.Context, job domain.Job) (string, error) {
 	// Create filter to match by ID
 	filter := bson.D{{Key: "_id", Value: job.ID}}
 
@@ -67,7 +88,7 @@ func (m *MongodbJobs) Save(ctx context.Context, job domain.Job) (string, error) 
 	return job.ID, nil
 }
 
-func (m *MongodbJobs) Delete(ctx context.Context, jobId string) (domain.Job, error) {
+func (m *MongoJobRepository) Delete(ctx context.Context, jobId string) (domain.Job, error) {
 	if jobId == "" {
 		return domain.Job{}, fmt.Errorf("job ID cannot be empty")
 	}
@@ -88,7 +109,7 @@ func (m *MongodbJobs) Delete(ctx context.Context, jobId string) (domain.Job, err
 	return job, nil
 }
 
-func (m *MongodbJobs) Retrieve(ctx context.Context, jobId string) (domain.Job, error) {
+func (m *MongoJobRepository) Get(ctx context.Context, jobId string) (domain.Job, error) {
 	if jobId == "" {
 		return domain.Job{}, fmt.Errorf("job ID cannot be empty")
 	}
@@ -109,7 +130,7 @@ func (m *MongodbJobs) Retrieve(ctx context.Context, jobId string) (domain.Job, e
 	return job, nil
 }
 
-func (m *MongodbJobs) RetrieveMany(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Job, error) {
+func (m *MongoJobRepository) List(ctx context.Context, query string, skip int, limit int, sort map[string]int) ([]domain.Job, error) {
 
 	// Create filter based on query string
 	var filter bson.D
@@ -154,7 +175,7 @@ func (m *MongodbJobs) RetrieveMany(ctx context.Context, query string, skip int, 
 	return jobs, nil
 }
 
-func (m *MongodbJobs) Close(ctx context.Context) {
+func (m *MongoJobRepository) Close(ctx context.Context) {
 	if m.client != nil {
 		m.client.Close(ctx)
 	}

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/joeg-ita/giobba/src/config"
+	"github.com/joeg-ita/giobba/src/domain"
 	"github.com/joeg-ita/giobba/src/handlers"
 	"github.com/joeg-ita/giobba/src/services"
 	"github.com/joeg-ita/giobba/src/usecases"
@@ -31,11 +32,11 @@ func Giobba() {
 	if err != nil {
 		log.Panic("unable to load database client")
 	}
-	mongodbJobs, err := services.NewMongodbJobs(mongodbClient, cfg.Database)
+	mongodbJobs, err := services.NewMongoJobRepository(mongodbClient, cfg.Database)
 	if err != nil {
 		log.Panic("unable to load jobs implementation")
 	}
-	mongodbTasks, err := services.NewMongodbTasks(mongodbClient, cfg.Database)
+	mongodbTasks, err := services.NewMongoTaskRepository(mongodbClient, cfg.Database)
 	if err != nil {
 		log.Panic("unable to load tasks implementation")
 	}
@@ -50,7 +51,7 @@ func Giobba() {
 		cfg)
 
 	for name, handler := range handlers.Handlers {
-		if utils.CheckInterface[services.TaskHandlerInt](handler) {
+		if utils.CheckInterface[domain.TaskHandlerInt](handler) {
 			scheduler.RegisterHandler(name, handler)
 		}
 	}

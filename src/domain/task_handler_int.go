@@ -1,9 +1,7 @@
-package services
+package domain
 
 import (
 	"context"
-
-	"github.com/joeg-ita/giobba/src/domain"
 )
 
 type HandlerResult struct {
@@ -12,5 +10,5 @@ type HandlerResult struct {
 }
 
 type TaskHandlerInt interface {
-	Run(ctx context.Context, task domain.Task) HandlerResult
+	Run(ctx context.Context, task Task) HandlerResult
 }
